@@ -1,0 +1,217 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Target, Users, Briefcase, Zap } from 'lucide-react';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { supabase } from '@/lib/customSupabaseClient';
+import { useToast } from '@/components/ui/use-toast';
+import { v4 as uuidv4 } from 'uuid';
+import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
+
+export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const [experienceLevel, setExperienceLevel] = useState(null);
+  const [clientType, setClientType] = useState(null);
+  const [topic, setTopic] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      // Reset state when dialog opens
+      setExperienceLevel(user?.user_metadata?.experience_level || null);
+      setClientType(null);
+      setTopic('');
+      setIsLoading(false);
+    }
+  }, [open, user]);
+
+  const handleStartSession = async () => {
+    if (!experienceLevel || !clientType || !topic.trim()) {
+      toast({
+        title: "Chýbajúce informácie",
+        description: "Prosím, vyplňte všetky parametre simulácie.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsLoading(true);
+
+    const sessionId = uuidv4();
+
+    const sessionData = {
+      id: sessionId,
+      user_id: user.id,
+      module_code: moduleCode,
+      status: 'started',
+      started_at: new Date().toISOString(),
+      topic: topic.trim(),
+      client_disc_type: clientType,
+      difficulty: experienceLevel,
+      industry: topic.trim(), // Mapping topic to industry
+    };
+
+    try {
+      const { error } = await supabase.from('sessions').insert([sessionData]);
+      if (error) throw error;
+      
+      navigate(`/session/${sessionId}`);
+    } catch (error) {
+      console.error('Error starting session:', error);
+      toast({
+        title: "Chyba",
+        description: `Nepodarilo sa začať novú simuláciu: ${error.message}`,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
+  
+  const isFormValid = experienceLevel && clientType && topic.trim();
+
+  const experienceLevels = [
+    { value: 'beginner', label: 'Začiatočník', description: 'Jednoduché námietky, nápovedy' },
+    { value: 'advanced', label: 'Pokročilý', description: 'Realistické scenáre, ROI argumentácia' },
+    { value: 'expert', label: 'Expert', description: 'Náročný klient, tvrdé vyjednávanie' }
+  ];
+
+  const clientTypes = [
+    { value: 'D', label: 'Dominantný', description: 'Rýchly, priamy, orientovaný na výsledky', color: 'bg-red-500' },
+    { value: 'I', label: 'Interaktívny', description: 'Komunikatívny, emocionálny, priateľský', color: 'bg-yellow-500' },
+    { value: 'S', label: 'Stabilný', description: 'Pokojný, lojálny, hľadá istotu', color: 'bg-green-500' },
+    { value: 'C', label: 'Analytický', description: 'Precízny, logický, detailista', color: 'bg-blue-500' },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-3xl p-0 bg-[#B81547] flex flex-col h-full sm:h-auto sm:max-h-[90vh]" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <div className="flex-shrink-0 p-6 sm:p-10 pb-4 sm:pb-8 bg-[#B81547] rounded-t-lg"> {/* Header */}
+          <DialogHeader className="text-center">
+            <DialogTitle className="text-3xl font-bold text-white">Nová obchodná simulácia</DialogTitle>
+            <DialogDescription className="text-white text-base opacity-90 mt-2">
+              Nastav parametre tréningu a spusti realistickú simuláciu stretnutia s klientom
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+
+        <div className="flex-grow overflow-y-auto px-6 sm:px-10 bg-[#B81547]"> {/* Scrollable content area */}
+           <div className="space-y-6 sm:space-y-8">
+            {/* Úroveň obchodníka */}
+            <div className="space-y-4">
+              <h3 className="flex items-center gap-3 text-lg font-semibold text-white">
+                <Target className="w-5 h-5 text-white opacity-80" />
+                Úroveň obchodníka
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {experienceLevels.map((level) => (
+                  <motion.div
+                    key={level.value}
+                    onClick={() => setExperienceLevel(level.value)}
+                    className={cn(
+                      'p-4 sm:p-6 rounded-2xl border-2 text-center cursor-pointer transition-all duration-200',
+                      experienceLevel === level.value
+                        ? 'border-white bg-white text-slate-900 shadow-lg'
+                        : 'border-white/50 bg-white/10 hover:bg-white/20 text-white'
+                    )}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <p className="font-bold text-lg">{level.label}</p>
+                    <p className="text-sm mt-1">{level.description}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Typ klienta (DISC) */}
+            <div className="space-y-4">
+              <h3 className="flex items-center gap-3 text-lg font-semibold text-white">
+                <Users className="w-5 h-5 text-white opacity-80" />
+                Typ klienta (DISC)
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {clientTypes.map((type) => (
+                  <motion.div
+                    key={type.value}
+                    onClick={() => setClientType(type.value)}
+                    className={cn(
+                      'p-4 sm:p-6 rounded-2xl border-2 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-start',
+                       clientType === type.value
+                        ? 'border-white bg-white text-slate-900 shadow-lg'
+                        : 'border-white/50 bg-white/10 hover:bg-white/20 text-white'
+                    )}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <div className={cn('w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white font-bold text-xl sm:text-2xl mb-3', type.color)}>
+                      {type.value}
+                    </div>
+                    <p className="font-bold text-lg">{type.label}</p>
+                    <p className="text-sm mt-1 flex-grow">{type.description}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Odvetvie a téma stretnutia */}
+            <div className="space-y-4 pb-4">
+              <h3 className="flex items-center gap-3 text-lg font-semibold text-white">
+                <Briefcase className="w-5 h-5 text-white opacity-80" />
+                Odvetvie a téma stretnutia
+              </h3>
+              <Textarea
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="napr. predaj CRM systému pre malé firmy, B2B softvér pre výrobnú firmu..."
+                className="min-h-[80px] rounded-2xl border-white/50 bg-white/10 text-white placeholder:text-white/70 focus:bg-white focus:text-slate-900 focus:ring-white"
+              />
+              <p className="text-sm text-white px-2 opacity-90">
+                Popíšte čo predávate a komu – čím konkrétnejšie, tým realistickejšia simulácia.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-shrink-0 p-4 sm:p-6 bg-slate-50 border-t border-slate-200 rounded-b-lg"> {/* Footer area */}
+            <Button
+              type="button"
+              onClick={handleStartSession}
+              disabled={!isFormValid || isLoading}
+              className="w-full text-lg font-semibold py-6 sm:py-7 rounded-2xl bg-[#B81547] text-white hover:bg-[#A31341] disabled:bg-slate-300 disabled:cursor-not-allowed transition-all duration-300"
+            >
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={isLoading ? 'loading' : 'ready'}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center justify-center"
+                >
+                  {isLoading ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <Zap className="mr-2 h-5 w-5" />
+                  )}
+                  {isLoading ? 'Spúšťa sa...' : 'Spustiť simuláciu'}
+                </motion.span>
+              </AnimatePresence>
+            </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default StartSessionDialog;
