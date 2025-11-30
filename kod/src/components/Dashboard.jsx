@@ -3,12 +3,13 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
-import { LogOut, BarChart2, User, Settings } from 'lucide-react';
+import { LogOut, BarChart2, User } from 'lucide-react';
 import DashboardStats from '@/components/DashboardStats';
 import RecentSessions from '@/components/RecentSessions';
 import DashboardSkeleton from '@/components/DashboardSkeleton';
 import ModuleSelector from '@/components/ModuleSelector';
 import PodcastBanner from '@/components/PodcastBanner';
+import LiboChat from '@/components/LiboChat'; // <= Libo
 import { useNavigate } from 'react-router-dom';
 import {
   DropdownMenu,
@@ -18,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 const Dashboard = () => {
   const { profile, signOut, session } = useAuth();
@@ -81,7 +82,9 @@ const Dashboard = () => {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                 <Avatar className="h-10 w-10">
-                  <AvatarFallback>{getInitials(profile?.first_name, profile?.last_name)}</AvatarFallback>
+                  <AvatarFallback>
+                    {getInitials(profile?.first_name, profile?.last_name)}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
@@ -113,14 +116,14 @@ const Dashboard = () => {
 
       <main className="p-6 max-w-7xl mx-auto">
         <div className="flex justify-between items-start mb-8">
-            <div>
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">
-                    Vitajte späť, {profile?.first_name || 'používateľ'}! 👋
-                </h2>
-                <p className="text-slate-600">
-                    Tu je prehľad vašich doterajších aktivít a výsledkov.
-                </p>
-            </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">
+              Vitajte späť, {profile?.first_name || 'používateľ'}! 👋
+            </h2>
+            <p className="text-slate-600">
+              Tu je prehľad vašich doterajších aktivít a výsledkov.
+            </p>
+          </div>
         </div>
 
         {loading ? (
@@ -128,22 +131,30 @@ const Dashboard = () => {
         ) : data ? (
           <div className="space-y-8">
             {data.summary_stats.total_sessions > 0 ? (
-                <>
-                    <DashboardStats stats={data.summary_stats} />
-                    <RecentSessions sessions={data.recent_sessions} />
-                </>
+              <>
+                <DashboardStats stats={data.summary_stats} />
+                <RecentSessions sessions={data.recent_sessions} />
+              </>
             ) : (
-                <div className="text-center py-16 px-6 bg-white rounded-2xl border border-dashed border-slate-300">
-                    <BarChart2 className="mx-auto h-12 w-12 text-slate-400"/>
-                    <h3 className="mt-4 text-xl font-semibold text-slate-800">Zatiaľ žiadne dáta</h3>
-                    <p className="mt-2 text-slate-500">Absolvujte svoje prvé simulované stretnutie a sledujte svoj pokrok.</p>
-                </div>
+              <div className="text-center py-16 px-6 bg-white rounded-2xl border border-dashed border-slate-300">
+                <BarChart2 className="mx-auto h-12 w-12 text-slate-400" />
+                <h3 className="mt-4 text-xl font-semibold text-slate-800">
+                  Zatiaľ žiadne dáta
+                </h3>
+                <p className="mt-2 text-slate-500">
+                  Absolvujte svoje prvé simulované stretnutie a sledujte svoj pokrok.
+                </p>
+              </div>
             )}
-             <ModuleSelector modules={data.modules} /> 
-             <PodcastBanner />
+
+            <ModuleSelector modules={data.modules} />
+            <PodcastBanner />
           </div>
         ) : null}
       </main>
+
+      {/* Libo – support chatbot, dostupný na dashboarde */}
+      <LiboChat />
     </div>
   );
 };
