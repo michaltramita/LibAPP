@@ -1,25 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
+// Načítame URL a anon key z Vite env (používaš ich aj v customSupabaseClient)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
 const UpdatePassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [recoveryToken, setRecoveryToken] = useState(null);
 
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
   });
 
-  // 1) spracovanie access_token z hash časti URL
+  // 1) pri načítaní stránky si len uložíme access_token z hash časti URL
   useEffect(() => {
     const hash = window.location.hash || '';
 
@@ -30,37 +35,29 @@ const UpdatePassword = () => {
 
     // hash = "#access_token=...&refresh_token=...&..."
     const params = new URLSearchParams(hash.substring(1));
+    const accessToken = params.get('access_token');
 
-    const access_token = params.get('access_token');
-    const refresh_token = params.get('refresh_token');
-
-    if (!access_token) {
+    if (!accessToken) {
       navigate('/login');
       return;
     }
 
-    supabase.auth
-      .setSession({
-        access_token,
-        refresh_token,
-      })
-      .then(({ error }) => {
-        if (error) {
-          console.error('setSession error:', error);
-          toast({
-            variant: 'destructive',
-            title: 'Chyba',
-            description: 'Link na zmenu hesla je neplatný alebo vypršal.',
-          });
-          navigate('/login');
-        } else {
-          setIsReady(true);
-        }
-      });
-  }, [navigate, toast]);
+    setRecoveryToken(accessToken);
+    setIsReady(true);
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!recoveryToken) {
+      toast({
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Link na zmenu hesla je neplatný alebo vypršal.',
+      });
+      navigate('/login');
+      return;
+    }
 
     if (formData.password.length < 8) {
       toast({
@@ -80,18 +77,39 @@ const UpdatePassword = () => {
       return;
     }
 
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      toast({
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Chýba konfigurácia Supabase (URL alebo anon key).',
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: formData.password,
+      // 2) Priamo zavoláme REST endpoint Supabase na zmenu hesla
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${recoveryToken}`,
+        },
+        body: JSON.stringify({
+          password: formData.password,
+        }),
       });
 
-      if (error) {
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        const message =
+          errorBody?.message || 'Nepodarilo sa zmeniť heslo. Skúste to znova.';
         toast({
           variant: 'destructive',
           title: 'Chyba',
-          description: error.message,
+          description: message,
         });
         return;
       }
@@ -103,11 +121,11 @@ const UpdatePassword = () => {
 
       navigate('/login');
     } catch (err) {
-      console.error(err);
+      console.error('Password update error:', err);
       toast({
         variant: 'destructive',
         title: 'Chyba',
-        description: 'Nastala neočakávaná chyba.',
+        description: 'Nastala neočakávaná chyba pri komunikácii so serverom.',
       });
     } finally {
       setIsLoading(false);
