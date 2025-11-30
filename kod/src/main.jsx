@@ -15,6 +15,4 @@ const Root = () => (
   </BrowserRouter>
 );
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <Root />
-);
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
