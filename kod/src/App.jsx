@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
+import {
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useParams,
+  useLocation,
+} from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import RequireAuth from '@/components/RequireAuth';
@@ -60,7 +67,7 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // R outy, na ktorých nechceme zobrazovať IntroOverlay
+  // R outy, kde nechceme zobrazovať intro (vrátane resetu hesla)
   const authRoutes = [
     '/login',
     '/register',
@@ -79,7 +86,7 @@ function App() {
     }
   };
 
-  // Dôležité: intro NEzobrazujeme na auth routach (vrátane reset hesla)
+  // Intro overlay nespúšťame na auth routach
   if (!isIntroComplete && !shouldSkipIntro) {
     return <IntroOverlay onComplete={handleIntroComplete} />;
   }
@@ -95,20 +102,22 @@ function App() {
       </Helmet>
 
       <Routes>
-        {/* Public / auth routy */}
+        {/* Verejné / auth routy */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Reset hesla */}
-        <Route path="/auth/update-password" element={<UpdatePassword />} />
-        <Route path="/auth/callback" element={<Callback />} />
+        {/* Reset hesla – HLAVNÁ route */}
+        <Route path="/update-password" element={<UpdatePassword />} />
 
-        {/* Starší link bez /auth – presmerujeme */}
+        {/* Starší tvar s /auth, len presmerujeme */}
         <Route
-          path="/update-password"
-          element={<Navigate to="/auth/update-password" replace />}
+          path="/auth/update-password"
+          element={<Navigate to="/update-password" replace />}
         />
+
+        {/* Callback pre prípadné magic link / OAuth */}
+        <Route path="/auth/callback" element={<Callback />} />
 
         {/* Chránené routy */}
         <Route
