@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 
 const PodcastBanner = () => {
@@ -9,6 +9,9 @@ const PodcastBanner = () => {
   // Apple Podcasts embed – z tvojho kódu
   const appleEmbedUrl =
     'https://embed.podcasts.apple.com/us/podcast/presah/id1669721867?itscg=30200&itsct=podcast_box_player&ls=1&mttnsubad=1669721867&theme=auto';
+
+  // 'spotify' alebo 'apple'
+  const [activeTab, setActiveTab] = useState<'spotify' | 'apple'>('spotify');
 
   return (
     <motion.section
@@ -31,48 +34,78 @@ const PodcastBanner = () => {
           </p>
         </header>
 
-        {/* Prehrávače – pod sebou, na mobile aj desktope prehľadné */}
-        <div className="space-y-6">
-          {/* Spotify */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-              Spotify
-            </p>
-            <iframe
-              src={spotifyEmbedUrl}
-              width="100%"
-              height="102"
-              frameBorder="0"
-              scrolling="no"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-              loading="lazy"
-              title="Prehrávač podcastu PRESAH – Spotify"
-            ></iframe>
-          </div>
+        {/* Tab lišta */}
+        <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-sm font-medium">
+          <button
+            type="button"
+            onClick={() => setActiveTab('spotify')}
+            className={[
+              'px-4 py-1.5 rounded-full transition-colors',
+              activeTab === 'spotify'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900',
+            ].join(' ')}
+          >
+            Spotify
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('apple')}
+            className={[
+              'px-4 py-1.5 rounded-full transition-colors',
+              activeTab === 'apple'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900',
+            ].join(' ')}
+          >
+            Apple Podcasts
+          </button>
+        </div>
 
-          {/* Apple Podcasts */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-              Apple Podcasts
-            </p>
-            <div className="w-full flex justify-center">
+        {/* Obsah tabu – zobrazíme vždy len jeden prehrávač */}
+        <div className="mt-4">
+          {activeTab === 'spotify' && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                Počúvaj na Spotify
+              </p>
               <iframe
-                src={appleEmbedUrl}
-                title="Prehrávač podcastu PRESAH – Apple Podcasts"
-                id="embedPlayer"
-                style={{
-                  border: 0,
-                  borderRadius: '12px',
-                  width: '100%',
-                  height: '450px',
-                  maxWidth: '660px',
-                }}
-                sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
-                allow="autoplay *; encrypted-media *; clipboard-write"
+                src={spotifyEmbedUrl}
+                width="100%"
+                height="102"
+                frameBorder="0"
+                scrolling="no"
+                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
                 loading="lazy"
+                title="Prehrávač podcastu PRESAH – Spotify"
               ></iframe>
             </div>
-          </div>
+          )}
+
+          {activeTab === 'apple' && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                Počúvaj na Apple Podcasts
+              </p>
+              <div className="w-full flex justify-center">
+                <iframe
+                  src={appleEmbedUrl}
+                  title="Prehrávač podcastu PRESAH – Apple Podcasts"
+                  id="embedPlayer"
+                  style={{
+                    border: 0,
+                    borderRadius: '12px',
+                    width: '100%',
+                    height: '450px',
+                    maxWidth: '660px',
+                  }}
+                  sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
+                  allow="autoplay *; encrypted-media *; clipboard-write"
+                  loading="lazy"
+                ></iframe>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </motion.section>
