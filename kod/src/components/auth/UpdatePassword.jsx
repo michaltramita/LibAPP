@@ -1,21 +1,15 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Helmet } from "react-helmet";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Loader2 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 
-// 1) Supabase URL a anon key
-// Najprv skúsime Vite env (Vercel), ak nie sú, použijeme hodnoty z customSupabaseClient
-const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ||
-  "https://nzocogzhakmqwiifrjuk.supabase.co";
-
-const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56b2NvZ3poYWttcXdpaWZyanVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxNDE1NDcsImV4cCI6MjA3OTcxNzU0N30.nxlVycIOhyd7Zn9zXLhSP6FMhJfYvFdiIzReFRUHkHY";
+// URL a anon key z Vite env (máš ich nastavené vo Verceli)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const UpdatePassword = () => {
   const navigate = useNavigate();
@@ -26,27 +20,25 @@ const UpdatePassword = () => {
   const [recoveryToken, setRecoveryToken] = useState(null);
 
   const [formData, setFormData] = useState({
-    password: "",
-    confirmPassword: "",
+    password: '',
+    confirmPassword: '',
   });
 
-  // 2) Pri načítaní stránky si len uložíme access_token z hash časti URL
+  // načítame access_token z hash časti URL
   useEffect(() => {
-    const hash = window.location.hash || "";
+    const hash = window.location.hash || '';
 
-    // Očakávame: #access_token=...&expires_at=...&refresh_token=...&type=recovery
-    if (!hash.includes("access_token")) {
-      console.error("UpdatePassword: hash neobsahuje access_token", hash);
-      navigate("/login");
+    if (!hash.includes('access_token')) {
+      navigate('/login');
       return;
     }
 
+    // "#access_token=...&refresh_token=..."
     const params = new URLSearchParams(hash.substring(1));
-    const accessToken = params.get("access_token");
+    const accessToken = params.get('access_token');
 
     if (!accessToken) {
-      console.error("UpdatePassword: access_token sa nepodarilo prečítať", hash);
-      navigate("/login");
+      navigate('/login');
       return;
     }
 
@@ -59,41 +51,37 @@ const UpdatePassword = () => {
 
     if (!recoveryToken) {
       toast({
-        variant: "destructive",
-        title: "Chyba",
-        description: "Link na zmenu hesla je neplatný alebo vypršal.",
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Link na zmenu hesla je neplatný alebo vypršal.',
       });
-      navigate("/login");
+      navigate('/login');
       return;
     }
 
     if (formData.password.length < 8) {
       toast({
-        variant: "destructive",
-        title: "Chyba",
-        description: "Heslo musí mať min. 8 znakov.",
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Heslo musí mať min. 8 znakov.',
       });
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
       toast({
-        variant: "destructive",
-        title: "Chyba",
-        description: "Heslá sa nezhodujú.",
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Heslá sa nezhodujú.',
       });
       return;
     }
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.error("UpdatePassword: chýba SUPABASE_URL alebo SUPABASE_ANON_KEY", {
-        SUPABASE_URL,
-        hasKey: !!SUPABASE_ANON_KEY,
-      });
       toast({
-        variant: "destructive",
-        title: "Chyba",
-        description: "Chýba konfigurácia Supabase (URL alebo anon key).",
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Chýba konfigurácia Supabase (URL alebo anon key).',
       });
       return;
     }
@@ -101,10 +89,11 @@ const UpdatePassword = () => {
     setIsLoading(true);
 
     try {
+      // priame volanie Supabase REST endpointu na zmenu hesla
       const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-        method: "PUT", // Supabase podporuje PUT na /auth/v1/user
+        method: 'PUT',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           apikey: SUPABASE_ANON_KEY,
           Authorization: `Bearer ${recoveryToken}`,
         },
@@ -114,43 +103,33 @@ const UpdatePassword = () => {
       });
 
       if (!response.ok) {
-        let errorBody = null;
-        try {
-          errorBody = await response.json();
-        } catch (_) {
-          // nič
-        }
-
-        console.error("UpdatePassword: Supabase response error", {
-          status: response.status,
-          errorBody,
-        });
-
+        const errorBody = await response.json().catch(() => null);
         const message =
-          errorBody?.message ||
-          "Nepodarilo sa zmeniť heslo. Skúste to znova alebo si vyžiadajte nový link.";
-
+          errorBody?.message || 'Nepodarilo sa zmeniť heslo. Skúste to znova.';
         toast({
-          variant: "destructive",
-          title: "Chyba",
+          variant: 'destructive',
+          title: 'Chyba',
           description: message,
         });
         return;
       }
 
       toast({
-        title: "Úspech",
-        description: "Heslo bolo úspešne zmenené. Môžete sa prihlásiť.",
+        title: 'Úspech',
+        description: 'Heslo bolo úspešne zmenené. Môžete sa prihlásiť.',
       });
 
-      navigate("/login");
+      // KĽÚČOVÁ ZMENA:
+      // spravíme plný reload stránky na /login,
+      // aby sa AuthProvider a celá appka načítali od nuly
+      window.location.href = '/login';
+
     } catch (err) {
-      console.error("UpdatePassword: network/unknown error", err);
+      console.error('Password update error:', err);
       toast({
-        variant: "destructive",
-        title: "Chyba",
-        description:
-          "Nastala neočakávaná chyba pri komunikácii so serverom. Skúste to prosím znova.",
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Nastala neočakávaná chyba pri komunikácii so serverom.',
       });
     } finally {
       setIsLoading(false);
