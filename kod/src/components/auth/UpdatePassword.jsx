@@ -12,78 +12,79 @@ const UpdatePassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const [initializing, setInitializing] = useState(true);   // načítavanie tokenu zo URL
+  const [isSubmitting, setIsSubmitting] = useState(false);  // ukladané heslo
+
   const [formData, setFormData] = useState({
     password: "",
     confirmPassword: "",
   });
 
-  const [isReady, setIsReady] = useState(false);      // či môžeme ukázať formulár
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // 1. Pri načítaní stránky spracuj token z URL hash-u a nastav session
+  // 1. Po načítaní stránky spracuj hash a nastav Supabase session (bez blokovania UI)
   useEffect(() => {
-    const initFromHash = async () => {
-      try {
-        const hash = window.location.hash || "";
+    const initFromHash = () => {
+      const hash = window.location.hash || "";
 
-        if (!hash.includes("access_token")) {
-          toast({
-            variant: "destructive",
-            title: "Chyba",
-            description:
-              "Chýba token pre obnovu hesla. Skúste si poslať e-mail na obnovu znova.",
-          });
-          return;
-        }
-
-        // hash začína "#access_token=..."
-        const params = new URLSearchParams(hash.substring(1));
-        const access_token = params.get("access_token");
-        const refresh_token = params.get("refresh_token");
-
-        if (!access_token) {
-          toast({
-            variant: "destructive",
-            title: "Chyba",
-            description:
-              "Token pre obnovu hesla nie je platný. Skúste to prosím znova.",
-          });
-          return;
-        }
-
-        const { error } = await supabase.auth.setSession({
-          access_token,
-          // refresh token môže, ale nemusí byť
-          ...(refresh_token ? { refresh_token } : {}),
-        });
-
-        if (error) {
-          console.error("setSession error:", error);
-          toast({
-            variant: "destructive",
-            title: "Chyba",
-            description:
-              "Token už neplatí alebo je neplatný. Požiadajte o nový e-mail na obnovu hesla.",
-          });
-        }
-      } catch (err) {
-        console.error("initFromHash error:", err);
+      // očakávame formát:
+      // #access_token=...&refresh_token=...&type=recovery
+      if (!hash.includes("access_token")) {
         toast({
           variant: "destructive",
-          title: "Chyba",
+          title: "Neplatný odkaz",
           description:
-            "Nepodarilo sa načítať údaje na obnovu hesla. Skúste to prosím znova.",
+            "Chýba token pre obnovu hesla. Skúste si vyžiadať nový e-mail na obnovu hesla.",
         });
-      } finally {
-        // kľúčové: vždy povolíme zobraziť formulár, aby neskončil v nekonečnom spinnere
-        setIsReady(true);
+        navigate("/login");
+        return;
       }
+
+      const params = new URLSearchParams(hash.substring(1));
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+
+      if (!access_token) {
+        toast({
+          variant: "destructive",
+          title: "Neplatný odkaz",
+          description:
+            "Token pre obnovu hesla nie je platný. Skúste to prosím znova.",
+        });
+        navigate("/login");
+        return;
+      }
+
+      // Session nastavíme „na pozadí“ – nečakáme na výsledok, aby sme neviseli na spinnri
+      supabase.auth
+        .setSession(
+          refresh_token
+            ? { access_token, refresh_token }
+            : { access_token }
+        )
+        .then(({ error }) => {
+          if (error) {
+            console.error("setSession error:", error);
+            // len info pre používateľa, formulár necháme zobrazený
+            toast({
+              variant: "destructive",
+              title: "Upozornenie",
+              description:
+                "Odkaz na obnovu hesla už nemusel byť platný. Ak zmena hesla zlyhá, požiadajte o nový e-mail.",
+            });
+          }
+        })
+        .catch((err) => {
+          console.error("setSession unexpected error:", err);
+        })
+        .finally(() => {
+          // UI vždy uvoľníme
+          setInitializing(false);
+        });
     };
 
     initFromHash();
-  }, [toast]);
+  }, [navigate, toast]);
 
-  // 2. Odoslanie formulára – reálna zmena hesla
+  // 2. Odoslanie nového hesla
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -116,8 +117,9 @@ const UpdatePassword = () => {
         console.error("updateUser error:", error);
         toast({
           variant: "destructive",
-          title: "Chyba",
-          description: error.message || "Nepodarilo sa zmeniť heslo.",
+          title: "Chyba pri zmene hesla",
+          description:
+            error.message || "Nepodarilo sa zmeniť heslo. Skúste to prosím znova.",
         });
         return;
       }
@@ -129,7 +131,7 @@ const UpdatePassword = () => {
 
       navigate("/login");
     } catch (err) {
-      console.error("updateUser catch error:", err);
+      console.error("updateUser unexpected error:", err);
       toast({
         variant: "destructive",
         title: "Chyba",
@@ -140,8 +142,8 @@ const UpdatePassword = () => {
     }
   };
 
-  // 3. Kým spracúvame hash -> loader, ale už sa nezacyklí
-  if (!isReady) {
+  // 3. Počas inicializácie (čítanie hash + setSession) zobrazíme loader
+  if (initializing) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50">
         <Loader2 className="h-8 w-8 animate-spin text-[#B81547]" />
@@ -149,7 +151,7 @@ const UpdatePassword = () => {
     );
   }
 
-  // 4. Formulár na nastavenie nového hesla
+  // 4. Formulár na nové heslo
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <Helmet>
@@ -174,7 +176,10 @@ const UpdatePassword = () => {
               type="password"
               value={formData.password}
               onChange={(e) =>
-                setFormData((prev) => ({ ...prev, password: e.target.value }))
+                setFormData((prev) => ({
+                  ...prev,
+                  password: e.target.value,
+                }))
               }
               required
               placeholder="Min. 8 znakov"
