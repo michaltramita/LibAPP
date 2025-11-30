@@ -10,8 +10,8 @@ const PodcastBanner = () => {
   const appleEmbedUrl =
     'https://embed.podcasts.apple.com/us/podcast/presah/id1669721867?itscg=30200&itsct=podcast_box_player&ls=1&mttnsubad=1669721867&theme=auto';
 
-  // 'spotify' alebo 'apple'
-  const [activeTab, setActiveTab] = useState<'spotify' | 'apple'>('spotify');
+  // 'spotify' alebo 'apple' – bez TS typov
+  const [activeTab, setActiveTab] = useState('spotify');
 
   return (
     <motion.section
@@ -39,24 +39,24 @@ const PodcastBanner = () => {
           <button
             type="button"
             onClick={() => setActiveTab('spotify')}
-            className={[
-              'px-4 py-1.5 rounded-full transition-colors',
-              activeTab === 'spotify'
+            className={
+              'px-4 py-1.5 rounded-full transition-colors ' +
+              (activeTab === 'spotify'
                 ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-900',
-            ].join(' ')}
+                : 'text-slate-500 hover:text-slate-900')
+            }
           >
             Spotify
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('apple')}
-            className={[
-              'px-4 py-1.5 rounded-full transition-colors',
-              activeTab === 'apple'
+            className={
+              'px-4 py-1.5 rounded-full transition-colors ' +
+              (activeTab === 'apple'
                 ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-900',
-            ].join(' ')}
+                : 'text-slate-500 hover:text-slate-900')
+            }
           >
             Apple Podcasts
           </button>
