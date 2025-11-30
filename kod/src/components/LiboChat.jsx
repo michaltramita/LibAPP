@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { MessageCircle, X, Send } from 'lucide-react';
 
+// Avatar komponent pre Liba – berie obrázok z public/Libo.png
+const LiboAvatar = ({ size = 32 }) => {
+  return (
+    <img
+      src="/Libo.png"
+      alt="Libo maskot"
+      className="rounded-full object-cover"
+      style={{ width: size, height: size }}
+    />
+  );
+};
+
 const LiboChat = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -59,8 +71,9 @@ const LiboChat = () => {
             onClick={toggleOpen}
             className="flex items-center gap-2 rounded-full bg-[#B81547] px-4 py-3 text-white shadow-lg hover:bg-[#9e123d] transition-colors"
           >
-            <MessageCircle className="w-5 h-5" />
+            <LiboAvatar size={24} />
             <span>Libo</span>
+            <MessageCircle className="w-4 h-4" />
           </button>
         )}
       </div>
@@ -71,10 +84,13 @@ const LiboChat = () => {
           <div className="flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 h-[420px]">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-2xl">
-              <div>
-                <div className="font-semibold text-slate-900">Libo – podpora</div>
-                <div className="text-xs text-slate-500">
-                  Pomáham ti s LibApp, modulmi a simuláciami
+              <div className="flex items-center gap-3">
+                <LiboAvatar size={32} />
+                <div>
+                  <div className="font-semibold text-slate-900">Libo – podpora</div>
+                  <div className="text-xs text-slate-500">
+                    Pomáham ti s LibApp, modulmi a simuláciami
+                  </div>
                 </div>
               </div>
               <button
@@ -88,26 +104,37 @@ const LiboChat = () => {
 
             {/* Správy */}
             <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm bg-slate-50/60">
-              {messages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={
-                    msg.role === 'user'
-                      ? 'flex justify-end'
-                      : 'flex justify-start'
-                  }
-                >
+              {messages.map((msg, idx) => {
+                const isUser = msg.role === 'user';
+
+                return (
                   <div
+                    key={idx}
                     className={
-                      msg.role === 'user'
-                        ? 'max-w-[80%] rounded-2xl bg-[#B81547] text-white px-3 py-2 text-sm'
-                        : 'max-w-[80%] rounded-2xl bg-white border border-slate-200 text-slate-900 px-3 py-2 text-sm'
+                      isUser
+                        ? 'flex justify-end'
+                        : 'flex justify-start items-end gap-2'
                     }
                   >
-                    {msg.text}
+                    {/* Avatar pri správach Liba */}
+                    {!isUser && (
+                      <div className="flex-shrink-0">
+                        <LiboAvatar size={24} />
+                      </div>
+                    )}
+
+                    <div
+                      className={
+                        isUser
+                          ? 'max-w-[80%] rounded-2xl bg-[#B81547] text-white px-3 py-2 text-sm'
+                          : 'max-w-[80%] rounded-2xl bg-white border border-slate-200 text-slate-900 px-3 py-2 text-sm'
+                      }
+                    >
+                      {msg.text}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Input */}
