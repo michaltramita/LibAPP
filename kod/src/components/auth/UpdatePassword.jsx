@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
+import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-
-// Načítame URL a anon key z Vite env (používaš ich aj v customSupabaseClient)
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 const UpdatePassword = () => {
   const navigate = useNavigate();
@@ -17,16 +14,29 @@ const UpdatePassword = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const [recoveryToken, setRecoveryToken] = useState(null);
-
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
   });
 
-  // 1) pri načítaní stránky si len uložíme access_token z hash časti URL
+  // 1) Po načítaní stránky spracujeme URL hash a nastavíme Supabase session
   useEffect(() => {
     const hash = window.location.hash || '';
+
+    // Supabase pri chybe pošle napr.:
+    // #error=access_denied&error_code=otp_expired&error_description=...
+    if (hash.includes('error=')) {
+      const params = new URLSearchParams(hash.substring(1));
+      const description =
+        params.get('error_description') || 'Odkaz na zmenu hesla je neplatný.';
+      toast({
+        variant: 'destructive',
+        title: 'Chyba',
+        description: decodeURIComponent(description.replace(/\+/g, ' ')),
+      });
+      navigate('/login');
+      return;
+    }
 
     if (!hash.includes('access_token')) {
       navigate('/login');
@@ -35,29 +45,39 @@ const UpdatePassword = () => {
 
     // hash = "#access_token=...&refresh_token=...&..."
     const params = new URLSearchParams(hash.substring(1));
-    const accessToken = params.get('access_token');
+    const access_token = params.get('access_token');
+    const refresh_token = params.get('refresh_token');
 
-    if (!accessToken) {
+    if (!access_token) {
       navigate('/login');
       return;
     }
 
-    setRecoveryToken(accessToken);
-    setIsReady(true);
-  }, [navigate]);
+    // Nastavíme session z recovery linku
+    supabase.auth
+      .setSession({
+        access_token,
+        refresh_token,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('setSession error:', error);
+          toast({
+            variant: 'destructive',
+            title: 'Chyba',
+            description:
+              error.message ||
+              'Odkaz na zmenu hesla je neplatný alebo vypršal.',
+          });
+          navigate('/login');
+          return;
+        }
+        setIsReady(true);
+      });
+  }, [navigate, toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!recoveryToken) {
-      toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Link na zmenu hesla je neplatný alebo vypršal.',
-      });
-      navigate('/login');
-      return;
-    }
 
     if (formData.password.length < 8) {
       toast({
@@ -77,39 +97,21 @@ const UpdatePassword = () => {
       return;
     }
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Chýba konfigurácia Supabase (URL alebo anon key).',
-      });
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      // 2) Priamo zavoláme REST endpoint Supabase na zmenu hesla
-      const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${recoveryToken}`,
-        },
-        body: JSON.stringify({
-          password: formData.password,
-        }),
+      const { error } = await supabase.auth.updateUser({
+        password: formData.password,
       });
 
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => null);
-        const message =
-          errorBody?.message || 'Nepodarilo sa zmeniť heslo. Skúste to znova.';
+      if (error) {
+        console.error('updateUser error:', error);
         toast({
           variant: 'destructive',
           title: 'Chyba',
-          description: message,
+          description:
+            error.message ||
+            'Nepodarilo sa zmeniť heslo. Skúste to prosím znova.',
         });
         return;
       }
@@ -118,10 +120,9 @@ const UpdatePassword = () => {
         title: 'Úspech',
         description: 'Heslo bolo úspešne zmenené. Môžete sa prihlásiť.',
       });
-
       navigate('/login');
     } catch (err) {
-      console.error('Password update error:', err);
+      console.error('Password update exception:', err);
       toast({
         variant: 'destructive',
         title: 'Chyba',
