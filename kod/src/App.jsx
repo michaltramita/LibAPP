@@ -23,6 +23,7 @@ import SalesMeetingSimulator from '@/components/SalesMeetingSimulator';
 import ModuleDetail from '@/components/ModuleDetail';
 import ProfilePage from '@/components/ProfilePage';
 import FeedbackPanel from '@/components/FeedbackPanel';
+import LiboChat from '@/components/LiboChat';
 
 // Wrapper component to extract sessionId from URL and pass it to the simulator
 const SimulationPage = () => {
@@ -75,7 +76,7 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // R outy, kde nechceme zobrazovať intro (login, register, zabudnuté heslo, reset hesla, callback)
+  // Routy, kde nechceme zobrazovať intro (login, register, zabudnuté heslo, reset hesla, callback)
   const authRoutes = [
     '/login',
     '/register',
@@ -170,6 +171,9 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+
+      {/* Libo je viditeľný len pre prihlásených používateľov, na všetkých stránkach */}
+      {session && <LiboChat />}
     </>
   );
 }
