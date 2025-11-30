@@ -8,7 +8,7 @@ const LiboChat = () => {
   const [messages, setMessages] = useState([
     {
       role: 'libo',
-      text: 'Ahoj, som Libo 👋 Som tvoj sprievodca v LibApp. Spýtaj sa ma na moduly, simulácie alebo výsledky.',
+      text: 'Ahoj, som Libo. Som tvoj sprievodca v LibApp. Môžeš sa ma spýtať na moduly, simulácie alebo výsledky.',
     },
   ]);
 
@@ -26,23 +26,22 @@ const LiboChat = () => {
     setIsSending(true);
 
     try {
-      // ZATIAĽ len jednoduchá lokálna odpoveď (placeholder)
+      // Zatiaľ len jednoduchá lokálna odpoveď – placeholder
       const replyText =
-        'Zatiaľ som v beta verzii. Povedz mi, s ktorou časťou LibApp potrebuješ pomôcť – login, moduly, simulácie alebo výsledky?';
+        'Momentálne som v testovacej verzii. Napíš mi, či riešiš login, moduly, simulácie alebo výsledky a pokúsim sa ťa nasmerovať.';
 
       const liboMessage = { role: 'libo', text: replyText };
 
       setMessages((prev) => [...prev, liboMessage]);
 
-      // Neskôr sem pripojíme fetch na /api/libo
-      // const response = await fetch('/api/libo', { ... })
+      // Sem neskôr doplníme volanie na backend /api/libo
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
         ...prev,
         {
           role: 'libo',
-          text: 'Ups, niečo sa pokazilo. Skús to prosím o chvíľu znova.',
+          text: 'Niečo sa pokazilo. Skús to prosím o chvíľu znova.',
         },
       ]);
     } finally {
@@ -52,7 +51,7 @@ const LiboChat = () => {
 
   return (
     <>
-      {/* Floating button */}
+      {/* Floating tlačidlo */}
       <div className="fixed bottom-4 right-4 z-40">
         {!isOpen && (
           <button
@@ -87,7 +86,7 @@ const LiboChat = () => {
               </button>
             </div>
 
-            {/* Messages */}
+            {/* Správy */}
             <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm bg-slate-50/60">
               {messages.map((msg, idx) => (
                 <div
