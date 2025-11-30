@@ -1,171 +1,175 @@
-import React, { useState } from 'react';
-import { MessageCircle, X, Send } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { supabase } from '@/lib/customSupabaseClient';
+import { useToast } from '@/components/ui/use-toast';
+import { Button } from '@/components/ui/button';
+import { LogOut, BarChart2, User } from 'lucide-react';
+import DashboardStats from '@/components/DashboardStats';
+import RecentSessions from '@/components/RecentSessions';
+import DashboardSkeleton from '@/components/DashboardSkeleton';
+import ModuleSelector from '@/components/ModuleSelector';
+import PodcastBanner from '@/components/PodcastBanner';
+import { useNavigate } from 'react-router-dom';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
-// Jednoduchý avatar komponent – číta obrázok z public/Libo.png
-const LiboAvatar = ({ size = 32 }) => (
-  <img
-    src="/Libo.png"
-    alt="Libo – maskot LibApp"
-    className="rounded-full object-cover border border-white shadow-sm bg-white"
-    style={{ width: size, height: size }}
-  />
-);
+const Dashboard = () => {
+  const { profile, signOut, session } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
-const LiboChat = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [input, setInput] = useState('');
-  const [isSending, setIsSending] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      role: 'libo',
-      text:
-        'Ahoj, som Libo. Som tvoj sprievodca v LibApp. Môžeš sa ma spýtať na moduly, simulácie alebo výsledky.',
-    },
-  ]);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const toggleOpen = () => setIsOpen((prev) => !prev);
+  useEffect(() => {
+    if (session) {
+      const fetchDashboardData = async () => {
+        setLoading(true);
+        try {
+          const { data: responseData, error } = await supabase.functions.invoke(
+            'dashboard-data'
+          );
 
-  const handleSend = async (e) => {
-    e.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed || isSending) return;
+          if (error) throw new Error(error.message || 'An unknown error occurred.');
+          if (responseData.error) throw new Error(responseData.error);
 
-    const userMessage = { role: 'user', text: trimmed };
+          setData(responseData);
+        } catch (error) {
+          console.error('Error fetching dashboard data:', error.message);
+          toast({
+            variant: 'destructive',
+            title: 'Chyba pri načítaní dát',
+            description:
+              'Nepodarilo sa načítať dáta pre nástenku. Skúste to znova.',
+          });
+        } finally {
+          setLoading(false);
+        }
+      };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
-    setIsSending(true);
-
-    try {
-      // Zatiaľ len jednoduchá lokálna odpoveď – placeholder
-      const replyText =
-        'Momentálne som v testovacej verzii. Napíš mi, či riešiš login, moduly, simulácie alebo výsledky a pokúsim sa ťa nasmerovať.';
-
-      const liboMessage = { role: 'libo', text: replyText };
-
-      setMessages((prev) => [...prev, liboMessage]);
-
-      // Sem neskôr doplníme volanie na backend /api/libo
-    } catch (err) {
-      console.error(err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'libo',
-          text: 'Niečo sa pokazilo. Skús to prosím o chvíľu znova.',
-        },
-      ]);
-    } finally {
-      setIsSending(false);
+      fetchDashboardData();
     }
+  }, [session, toast]);
+
+  const getInitials = (firstName, lastName) => {
+    const first = firstName ? firstName.charAt(0).toUpperCase() : '';
+    const last = lastName ? lastName.charAt(0).toUpperCase() : '';
+    return `${first}${last}`;
   };
 
   return (
-    <>
-      {/* Floating tlačidlo */}
-      <div className="fixed bottom-4 right-4 z-40">
-        {!isOpen && (
-          <button
-            type="button"
-            onClick={toggleOpen}
-            className="flex items-center gap-2 rounded-full bg-[#B81547] px-4 py-3 text-white shadow-lg hover:bg-[#9e123d] transition-colors"
-            aria-label="Otvoriť chat s Libom"
-          >
-            <LiboAvatar size={24} />
-            <span>Libo</span>
-            <MessageCircle className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Chat panel */}
-      {isOpen && (
-        <div className="fixed bottom-4 right-4 z-40 w-full max-w-sm">
-          <div className="flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 h-[420px]">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-2xl">
-              <div className="flex items-center gap-3">
-                <LiboAvatar size={32} />
-                <div>
-                  <div className="font-semibold text-slate-900">Libo – podpora</div>
-                  <div className="text-xs text-slate-500">
-                    Pomáham ti s LibApp, modulmi a simuláciami
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={toggleOpen}
-                className="rounded-full p-1 hover:bg-slate-200 transition-colors"
-                aria-label="Zatvoriť chat"
-              >
-                <X className="w-4 h-4 text-slate-600" />
-              </button>
-            </div>
-
-            {/* Správy */}
-            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm bg-slate-50/60">
-              {messages.map((msg, idx) => {
-                const isUser = msg.role === 'user';
-
-                return (
-                  <div
-                    key={idx}
-                    className={
-                      isUser
-                        ? 'flex justify-end'
-                        : 'flex justify-start items-end gap-2'
-                    }
-                  >
-                    {/* Avatar pri správach Liba */}
-                    {!isUser && (
-                      <div className="flex-shrink-0">
-                        <LiboAvatar size={24} />
-                      </div>
-                    )}
-
-                    <div
-                      className={
-                        isUser
-                          ? 'max-w-[80%] rounded-2xl bg-[#B81547] text-white px-3 py-2 text-sm'
-                          : 'max-w-[80%] rounded-2xl bg-white border border-slate-200 text-slate-900 px-3 py-2 text-sm'
-                      }
-                    >
-                      {msg.text}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Input */}
-            <form
-              onSubmit={handleSend}
-              className="border-t border-slate-200 px-3 py-2 bg-white rounded-b-2xl"
-            >
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Napíš otázku pre Liba..."
-                  className="flex-1 text-sm border border-slate-200 rounded-full px-3 py-2 outline-none focus:ring-1 focus:ring-[#B81547] focus:border-[#B81547]"
-                />
-                <button
-                  type="submit"
-                  disabled={isSending || !input.trim()}
-                  className="rounded-full bg-[#B81547] text-white p-2 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Odoslať správu"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </form>
+    <div className="min-h-[70vh] flex flex-col gap-6">
+      {/* Header ako glass panel */}
+      <header className="rounded-3xl border border-white/15 bg-white/10 bg-gradient-to-br from-white/15 via-white/5 to-white/0 backdrop-blur-xl shadow-2xl shadow-black/40 px-6 py-4 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <img
+            src="https://horizons-cdn.hostinger.com/c7c4800e-7b32-471c-852f-a05cb57f1e91/083d123c3cdbe84b7f967b880b085698.png"
+            alt="Libellius logo"
+            className="w-10 h-10 object-contain"
+          />
+          <div>
+            <h1 className="font-bold text-lg leading-tight text-slate-50">
+              Libellius - LibApp
+            </h1>
+            <p className="text-xs text-slate-200/80">Tvoj AI pomocník</p>
           </div>
         </div>
-      )}
-    </>
+
+        <div className="flex items-center gap-4">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="relative h-10 w-10 rounded-full hover:bg-white/10"
+              >
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback>
+                    {getInitials(profile?.first_name, profile?.last_name)}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              className="w-56"
+              align="end"
+              forceMount
+            >
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none text-slate-900">
+                    {profile?.first_name} {profile?.last_name}
+                  </p>
+                  <p className="text-xs leading-none text-muted-foreground">
+                    {session?.user?.email}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate('/profile')}>
+                <User className="mr-2 h-4 w-4" />
+                <span>Môj profil</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={signOut}>
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Odhlásiť sa</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      {/* Hlavný obsah v jednom väčšom glass paneli */}
+      <main>
+        <div className="rounded-3xl border border-white/15 bg-white/10 bg-gradient-to-br from-white/15 via-white/5 to-white/0 backdrop-blur-xl shadow-2xl shadow-black/40 p-6 lg:p-8">
+          <div className="flex justify-between items-start mb-8">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-50 mb-2">
+                Vitajte späť, {profile?.first_name || 'používateľ'}!
+              </h2>
+              <p className="text-slate-200/90">
+                Tu je prehľad vašich doterajších aktivít a výsledkov.
+              </p>
+            </div>
+          </div>
+
+          {loading ? (
+            <DashboardSkeleton />
+          ) : data ? (
+            <div className="space-y-8">
+              {data.summary_stats.total_sessions > 0 ? (
+                <>
+                  <DashboardStats stats={data.summary_stats} />
+                  <RecentSessions sessions={data.recent_sessions} />
+                </>
+              ) : (
+                <div className="text-center py-16 px-6 rounded-2xl border border-dashed border-white/30 bg-white/5">
+                  <BarChart2 className="mx-auto h-12 w-12 text-slate-200/80" />
+                  <h3 className="mt-4 text-xl font-semibold text-slate-50">
+                    Zatiaľ žiadne dáta
+                  </h3>
+                  <p className="mt-2 text-slate-200/80">
+                    Absolvujte svoje prvé simulované stretnutie a sledujte svoj
+                    pokrok.
+                  </p>
+                </div>
+              )}
+
+              <ModuleSelector modules={data.modules} />
+              <PodcastBanner />
+            </div>
+          ) : null}
+        </div>
+      </main>
+    </div>
   );
 };
 
-export default LiboChat;
+export default Dashboard;
