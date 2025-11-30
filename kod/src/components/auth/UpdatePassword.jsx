@@ -11,75 +11,71 @@ import { useToast } from '@/components/ui/use-toast';
 const UpdatePassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
   const [formData, setFormData] = useState({
-    password: "",
-    confirmPassword: "",
+    password: '',
+    confirmPassword: '',
   });
 
   useEffect(() => {
-    const hash = window.location.hash;
+    const hash = window.location.hash || '';
 
-    let access_token = null;
-    let refresh_token = null;
+    // očakávame formát: #access_token=XXX&refresh_token=YYY&type=recovery
+    const params = new URLSearchParams(hash.replace('#', ''));
 
-    // Case 1: Supabase sends url with two hashes
-    // #/auth/update-password#access_token=...&refresh_token=...&type=recovery
-    if (hash.includes("#access_token")) {
-      const parts = hash.split("#");
-      if (parts.length >= 3) {
-        const params = new URLSearchParams(parts[2]);
-        access_token = params.get("access_token");
-        refresh_token = params.get("refresh_token");
-      }
-    }
-
-    // Case 2: Hostinger Horizons format
-    // #/auth/update-password?token=XYZ&type=recovery
-    if (!access_token) {
-      const query = hash.split("?")[1];
-      if (query) {
-        const params = new URLSearchParams(query);
-        const token = params.get("token");
-        if (token) {
-          access_token = token;
-        }
-      }
-    }
+    const access_token = params.get('access_token');
+    const refresh_token = params.get('refresh_token');
 
     if (!access_token) {
-      navigate("/login");
+      toast({
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Odkaz na zmenu hesla je neplatný alebo expirovaný.',
+      });
+      navigate('/login');
       return;
     }
 
-    supabase.auth.setSession({
-      access_token,
-      refresh_token,
-    }).then(() => {
-      setIsReady(true);
-    });
-
-  }, [navigate]);
+    supabase.auth
+      .setSession({
+        access_token,
+        refresh_token,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error(error);
+          toast({
+            variant: 'destructive',
+            title: 'Chyba',
+            description: 'Nepodarilo sa overiť odkaz na zmenu hesla.',
+          });
+          navigate('/login');
+        } else {
+          setIsReady(true);
+        }
+      });
+  }, [navigate, toast]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (formData.password.length < 8) {
       toast({
-        variant: "destructive",
-        title: "Chyba",
-        description: "Heslo musí mať min. 8 znakov."
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Heslo musí mať minimálne 8 znakov.',
       });
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
       toast({
-        variant: "destructive",
-        title: "Chyba",
-        description: "Heslá sa nezhodujú."
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Heslá sa nezhodujú.',
       });
       return;
     }
@@ -92,22 +88,27 @@ const UpdatePassword = () => {
       });
 
       if (error) {
+        console.error(error);
         toast({
-          variant: "destructive",
-          title: "Chyba",
-          description: error.message,
+          variant: 'destructive',
+          title: 'Chyba',
+          description: error.message || 'Nepodarilo sa zmeniť heslo.',
         });
         return;
       }
 
-      toast({ title: "Úspech", description: "Heslo bolo úspešne zmenené." });
-      navigate("/login");
-
-    } catch (err) {
       toast({
-        variant: "destructive",
-        title: "Chyba",
-        description: "Nastala neočakávaná chyba.",
+        title: 'Heslo zmenené',
+        description: 'Môžete sa prihlásiť novým heslom.',
+      });
+
+      navigate('/login');
+    } catch (err) {
+      console.error(err);
+      toast({
+        variant: 'destructive',
+        title: 'Chyba',
+        description: 'Nastala neočakávaná chyba.',
       });
     } finally {
       setIsLoading(false);
@@ -116,7 +117,7 @@ const UpdatePassword = () => {
 
   if (!isReady) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-screen items-center justify-center bg-slate-50">
         <Loader2 className="h-8 w-8 animate-spin text-[#B81547]" />
       </div>
     );
@@ -137,7 +138,6 @@ const UpdatePassword = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-
           <div className="space-y-2">
             <Label htmlFor="password">Nové heslo</Label>
             <Input
