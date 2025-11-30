@@ -15,24 +15,26 @@ const ModuleCard = ({ module, index }) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.1 }}
-      className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between"
+      transition={{ duration: 0.5, delay: index * 0.05 }}
+      className="rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl shadow-xl shadow-black/30 flex flex-col justify-between"
     >
-      <div>
-        <h4 className="font-bold text-lg text-slate-900 mb-2">
+      <div className="p-5 pb-4">
+        <h4 className="font-semibold text-base text-slate-50 mb-2">
           {module.title}
         </h4>
-        <p className="text-sm text-slate-600 mb-6">
+        <p className="text-xs text-slate-200/80 mb-4">
           {module.short_description}
         </p>
       </div>
-      <Button
-        onClick={handleNavigateToModule}
-        className="w-full group bg-[#B81547] hover:bg-[#9e123d] text-white"
-      >
-        Prejsť do modulu
-        <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
-      </Button>
+      <div className="px-5 pb-5">
+        <Button
+          onClick={handleNavigateToModule}
+          className="w-full group bg-[#B81547]/90 hover:bg-[#B81547] text-white border border-white/10 backdrop-blur"
+        >
+          Prejsť do modulu
+          <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+        </Button>
+      </div>
     </motion.div>
   );
 };
@@ -44,27 +46,24 @@ const ModuleSelector = ({ modules }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.3 }}
-        className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"
+        className="rounded-2xl border border-white/15 bg-white/10 backdrop-blur-xl shadow-xl shadow-black/30 p-6"
       >
-        <h3 className="text-xl font-bold text-slate-900 mb-4">
+        <h3 className="text-xl font-bold text-slate-50 mb-4">
           Dostupné moduly
         </h3>
-        <p className="text-slate-500">
+        <p className="text-slate-200/80">
           Momentálne nie sú dostupné žiadne tréningové moduly.
         </p>
       </motion.div>
     );
   }
 
-  // definícia názvov pre skupiny
-  const SALES_TITLES = ['Obchodný rozhovor', 'Tvorba ponúk na mieru'];
-  const LEADERSHIP_TITLES = ['Individuálny rozhovor', 'Koučing'];
-
+  // Rozdelenie modulov podľa kódu do SALES / LEADERSHIP
   const salesModules = modules.filter((m) =>
-    SALES_TITLES.includes(m.title)
+    ['OR01', 'TP01'].includes(m.code)
   );
   const leadershipModules = modules.filter((m) =>
-    LEADERSHIP_TITLES.includes(m.title)
+    ['IR01', 'KO01'].includes(m.code)
   );
 
   return (
@@ -74,19 +73,17 @@ const ModuleSelector = ({ modules }) => {
       transition={{ duration: 0.5, delay: 0.3 }}
       className="space-y-8"
     >
-      <h3 className="text-xl font-bold text-slate-900 mb-2">
+      <h3 className="text-xl font-bold text-slate-50 mb-2">
         Dostupné moduly
       </h3>
 
       {/* SALES */}
-      <section>
-        <div className="flex items-baseline justify-between mb-3">
-          <h4 className="text-sm font-semibold tracking-[0.18em] text-slate-500 uppercase">
+      {salesModules.length > 0 && (
+        <section className="space-y-3">
+          <h4 className="text-sm font-semibold tracking-[0.18em] text-slate-300 uppercase">
             Sales
           </h4>
-        </div>
-        {salesModules.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {salesModules.map((module, index) => (
               <ModuleCard
                 key={module.code}
@@ -95,22 +92,16 @@ const ModuleSelector = ({ modules }) => {
               />
             ))}
           </div>
-        ) : (
-          <p className="text-xs text-slate-400">
-            Zatiaľ nie sú dostupné žiadne moduly v oblasti Sales.
-          </p>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* LEADERSHIP */}
-      <section>
-        <div className="flex items-baseline justify-between mb-3">
-          <h4 className="text-sm font-semibold tracking-[0.18em] text-slate-500 uppercase">
+      {leadershipModules.length > 0 && (
+        <section className="space-y-3">
+          <h4 className="text-sm font-semibold tracking-[0.18em] text-slate-300 uppercase">
             Leadership
           </h4>
-        </div>
-        {leadershipModules.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {leadershipModules.map((module, index) => (
               <ModuleCard
                 key={module.code}
@@ -119,12 +110,8 @@ const ModuleSelector = ({ modules }) => {
               />
             ))}
           </div>
-        ) : (
-          <p className="text-xs text-slate-400">
-            Zatiaľ nie sú dostupné žiadne moduly v oblasti Leadership.
-          </p>
-        )}
-      </section>
+        </section>
+      )}
     </motion.div>
   );
 };
