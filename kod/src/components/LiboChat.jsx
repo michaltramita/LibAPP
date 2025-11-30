@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { MessageCircle, X, Send } from 'lucide-react';
 
-// Avatar komponent pre Liba – berie obrázok z public/Libo.png
-const LiboAvatar = ({ size = 32 }) => {
-  return (
-    <img
-      src="/Libo.png"
-      alt="Libo maskot"
-      className="rounded-full object-cover"
-      style={{ width: size, height: size }}
-    />
-  );
-};
+// Jednoduchý avatar komponent – číta obrázok z public/Libo.png
+const LiboAvatar = ({ size = 32 }) => (
+  <img
+    src="/Libo.png"
+    alt="Libo – maskot LibApp"
+    className="rounded-full object-cover border border-white shadow-sm bg-white"
+    style={{ width: size, height: size }}
+  />
+);
 
 const LiboChat = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -20,7 +18,8 @@ const LiboChat = () => {
   const [messages, setMessages] = useState([
     {
       role: 'libo',
-      text: 'Ahoj, som Libo. Som tvoj sprievodca v LibApp. Môžeš sa ma spýtať na moduly, simulácie alebo výsledky.',
+      text:
+        'Ahoj, som Libo. Som tvoj sprievodca v LibApp. Môžeš sa ma spýtať na moduly, simulácie alebo výsledky.',
     },
   ]);
 
@@ -70,6 +69,7 @@ const LiboChat = () => {
             type="button"
             onClick={toggleOpen}
             className="flex items-center gap-2 rounded-full bg-[#B81547] px-4 py-3 text-white shadow-lg hover:bg-[#9e123d] transition-colors"
+            aria-label="Otvoriť chat s Libom"
           >
             <LiboAvatar size={24} />
             <span>Libo</span>
@@ -97,6 +97,7 @@ const LiboChat = () => {
                 type="button"
                 onClick={toggleOpen}
                 className="rounded-full p-1 hover:bg-slate-200 transition-colors"
+                aria-label="Zatvoriť chat"
               >
                 <X className="w-4 h-4 text-slate-600" />
               </button>
@@ -154,6 +155,7 @@ const LiboChat = () => {
                   type="submit"
                   disabled={isSending || !input.trim()}
                   className="rounded-full bg-[#B81547] text-white p-2 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Odoslať správu"
                 >
                   <Send className="w-4 h-4" />
                 </button>
