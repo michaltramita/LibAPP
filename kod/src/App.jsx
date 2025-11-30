@@ -8,6 +8,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
+
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import RequireAuth from '@/components/RequireAuth';
 
@@ -62,12 +63,19 @@ const SimulationPage = () => {
 };
 
 function App() {
-  const [isIntroComplete, setIntroComplete] = useState(false);
+  // Intro sa po prvom prehratí označí v localStorage ("introSeen" = "1")
+  const [isIntroComplete, setIntroComplete] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('introSeen') === '1';
+    }
+    return false;
+  });
+
   const { session } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // R outy, kde nechceme zobrazovať intro (vrátane resetu hesla)
+  // R outy, kde nechceme zobrazovať intro (login, register, zabudnuté heslo, reset hesla, callback)
   const authRoutes = [
     '/login',
     '/register',
@@ -81,12 +89,19 @@ function App() {
 
   const handleIntroComplete = () => {
     setIntroComplete(true);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('introSeen', '1');
+    }
+
     if (!session) {
       navigate('/login');
+    } else {
+      navigate('/dashboard');
     }
   };
 
-  // Intro overlay nespúšťame na auth routach
+  // Intro zobrazujeme len ak ešte neprebehlo a zároveň nie sme na auth routach
   if (!isIntroComplete && !shouldSkipIntro) {
     return <IntroOverlay onComplete={handleIntroComplete} />;
   }
@@ -102,24 +117,19 @@ function App() {
       </Helmet>
 
       <Routes>
-        {/* Verejné / auth routy */}
+        {/* Auth stránky */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Reset hesla – HLAVNÁ route */}
+        {/* Reset hesla – podporujeme /update-password aj /auth/update-password */}
         <Route path="/update-password" element={<UpdatePassword />} />
+        <Route path="/auth/update-password" element={<UpdatePassword />} />
 
-        {/* Starší tvar s /auth, len presmerujeme */}
-        <Route
-          path="/auth/update-password"
-          element={<Navigate to="/update-password" replace />}
-        />
-
-        {/* Callback pre prípadné magic link / OAuth */}
+        {/* Callback (napr. magic linky) */}
         <Route path="/auth/callback" element={<Callback />} />
 
-        {/* Chránené routy */}
+        {/* Chránené časti aplikácie */}
         <Route
           path="/dashboard"
           element={
@@ -156,6 +166,7 @@ function App() {
           }
         />
 
+        {/* Default a fallback */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
