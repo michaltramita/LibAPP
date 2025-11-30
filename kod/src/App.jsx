@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import RequireAuth from '@/components/RequireAuth';
@@ -37,7 +37,13 @@ const SimulationPage = () => {
   };
 
   if (evaluation) {
-    return <FeedbackPanel evaluation={evaluation} onRestart={handleRestart} onReturnToDashboard={handleReturnToDashboard} />;
+    return (
+      <FeedbackPanel
+        evaluation={evaluation}
+        onRestart={handleRestart}
+        onReturnToDashboard={handleReturnToDashboard}
+      />
+    );
   }
 
   return (
@@ -48,11 +54,23 @@ const SimulationPage = () => {
   );
 };
 
-
 function App() {
   const [isIntroComplete, setIntroComplete] = useState(false);
   const { session } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // R outy, na ktorých nechceme zobrazovať IntroOverlay
+  const authRoutes = [
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/update-password',
+    '/auth/update-password',
+    '/auth/callback',
+  ];
+
+  const shouldSkipIntro = authRoutes.includes(location.pathname);
 
   const handleIntroComplete = () => {
     setIntroComplete(true);
@@ -61,7 +79,8 @@ function App() {
     }
   };
 
-  if (!isIntroComplete) {
+  // Dôležité: intro NEzobrazujeme na auth routach (vrátane reset hesla)
+  if (!isIntroComplete && !shouldSkipIntro) {
     return <IntroOverlay onComplete={handleIntroComplete} />;
   }
 
@@ -69,21 +88,29 @@ function App() {
     <>
       <Helmet>
         <title>Libellius - Virtuálny zákazník</title>
-        <meta name="description" content="Interaktívna aplikácia na simuláciu obchodných stretnutí na precvičenie predajných zručností." />
+        <meta
+          name="description"
+          content="Interaktívna aplikácia na simuláciu obchodných stretnutí na precvičenie predajných zručností."
+        />
       </Helmet>
 
       <Routes>
+        {/* Public / auth routy */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Auth Routes */}
+        {/* Reset hesla */}
         <Route path="/auth/update-password" element={<UpdatePassword />} />
         <Route path="/auth/callback" element={<Callback />} />
 
-        {/* Legacy Redirects or fallback */}
-        <Route path="/update-password" element={<Navigate to="/auth/update-password" replace />} />
+        {/* Starší link bez /auth – presmerujeme */}
+        <Route
+          path="/update-password"
+          element={<Navigate to="/auth/update-password" replace />}
+        />
 
+        {/* Chránené routy */}
         <Route
           path="/dashboard"
           element={
