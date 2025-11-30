@@ -1,5 +1,5 @@
 // src/components/auth/UpdatePassword.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -13,83 +13,46 @@ const UpdatePassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [isReady, setIsReady] = useState(false);   // či už máme platnú session
-  const [isLoading, setIsLoading] = useState(false); // loading pri Uložení hesla
+  const [isReady, setIsReady] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
   });
 
-  // 1) Po načítaní stránky z URL vytiahni tokeny a nastav Supabase session
+  // Overíme, že máme session z recovery linku
   useEffect(() => {
-    const initRecoverySession = async () => {
+    const verifySession = async () => {
       try {
-        // hash je vo formáte:
-        // #access_token=...&expires_at=...&refresh_token=...&type=recovery
-        const rawHash = window.location.hash.startsWith('#')
-          ? window.location.hash.slice(1)
-          : window.location.hash;
+        const { data: { session }, error } = await supabase.auth.getSession();
 
-        if (!rawHash) {
+        if (error || !session) {
           toast({
             variant: 'destructive',
-            title: 'Chyba odkazu',
-            description: 'Odkaz na obnovenie hesla je neplatný.',
+            title: 'Neplatný odkaz',
+            description:
+              'Odkaz na zmenu hesla je neplatný alebo mu vypršala platnosť. Skúste si vyžiadať nový.',
           });
-          navigate('/login');
+          navigate('/login', { replace: true });
           return;
         }
 
-        const params = new URLSearchParams(rawHash);
-        const access_token = params.get('access_token');
-        const refresh_token = params.get('refresh_token');
-        const type = params.get('type');
-
-        if (!access_token || type !== 'recovery') {
-          toast({
-            variant: 'destructive',
-            title: 'Chyba odkazu',
-            description: 'Odkaz na obnovenie hesla je neplatný alebo expiroval.',
-          });
-          navigate('/login');
-          return;
-        }
-
-        // nastavíme session z recovery tokenu
-        const { error } = await supabase.auth.setSession({
-          access_token,
-          // refresh_token môže byť null – vtedy pošleme prázdny string
-          refresh_token: refresh_token ?? '',
-        });
-
-        if (error) {
-          console.error('Supabase setSession error:', error);
-          toast({
-            variant: 'destructive',
-            title: 'Chyba prihlásenia',
-            description: 'Odkaz na obnovenie hesla je neplatný alebo expiroval.',
-          });
-          navigate('/login');
-          return;
-        }
-
-        // session OK → môžeme ukázať formulár
         setIsReady(true);
       } catch (err) {
-        console.error('Init recovery session error:', err);
+        console.error('Password recovery session error:', err);
         toast({
           variant: 'destructive',
           title: 'Chyba',
-          description: 'Nepodarilo sa načítať obnovu hesla.',
+          description:
+            'Nepodarilo sa overiť oprávnenie na zmenu hesla. Skúste to znova.',
         });
-        navigate('/login');
+        navigate('/login', { replace: true });
       }
     };
 
-    initRecoverySession();
+    verifySession();
   }, [navigate, toast]);
 
-  // 2) Odoslanie formulára – samotná zmena hesla
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -97,7 +60,7 @@ const UpdatePassword = () => {
       toast({
         variant: 'destructive',
         title: 'Chyba',
-        description: 'Heslo musí mať aspoň 8 znakov.',
+        description: 'Heslo musí mať minimálne 8 znakov.',
       });
       return;
     }
@@ -111,7 +74,7 @@ const UpdatePassword = () => {
       return;
     }
 
-    setIsLoading(true);
+    setIsSaving(true);
 
     try {
       const { error } = await supabase.auth.updateUser({
@@ -119,43 +82,44 @@ const UpdatePassword = () => {
       });
 
       if (error) {
-        console.error('Supabase updateUser error:', error);
+        console.error('updateUser error:', error);
         toast({
           variant: 'destructive',
           title: 'Chyba',
-          description: error.message || 'Nepodarilo sa zmeniť heslo.',
+          description:
+            error.message ||
+            'Nepodarilo sa zmeniť heslo. Skúste to prosím znova.',
         });
         return;
       }
 
       toast({
         title: 'Heslo zmenené',
-        description: 'Vaše heslo bolo úspešne zmenené. Môžete sa prihlásiť.',
+        description:
+          'Vaše heslo bolo úspešne zmenené. Môžete sa prihlásiť novým heslom.',
       });
 
-      navigate('/login');
+      navigate('/login', { replace: true });
     } catch (err) {
-      console.error('Unexpected update password error:', err);
+      console.error('Unexpected password update error:', err);
       toast({
         variant: 'destructive',
         title: 'Chyba',
         description: 'Nastala neočakávaná chyba pri zmene hesla.',
       });
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   };
 
-  // Kým nemáme platnú session z recovery linku, zobraz spinner
   if (!isReady) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
-        <Loader2 className="h-10 w-10 animate-spin text-[#B81547]" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#B81547]" />
       </div>
     );
   }
 
-  // 3) UI formulár
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <Helmet>
@@ -207,9 +171,9 @@ const UpdatePassword = () => {
           <Button
             type="submit"
             className="w-full bg-[#B81547] hover:bg-[#9e123d] text-white"
-            disabled={isLoading}
+            disabled={isSaving}
           >
-            {isLoading && (
+            {isSaving && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
             Uložiť nové heslo
