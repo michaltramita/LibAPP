@@ -11,7 +11,6 @@ import { useToast } from '@/components/ui/use-toast';
 const UpdatePassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
@@ -20,21 +19,22 @@ const UpdatePassword = () => {
     confirmPassword: '',
   });
 
+  // 1) spracovanie access_token z hash časti URL
   useEffect(() => {
     const hash = window.location.hash || '';
 
-    // očakávame formát: #access_token=XXX&refresh_token=YYY&type=recovery
-    const params = new URLSearchParams(hash.replace('#', ''));
+    if (!hash.includes('access_token')) {
+      navigate('/login');
+      return;
+    }
+
+    // hash = "#access_token=...&refresh_token=...&..."
+    const params = new URLSearchParams(hash.substring(1));
 
     const access_token = params.get('access_token');
     const refresh_token = params.get('refresh_token');
 
     if (!access_token) {
-      toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Odkaz na zmenu hesla je neplatný alebo expirovaný.',
-      });
       navigate('/login');
       return;
     }
@@ -46,11 +46,11 @@ const UpdatePassword = () => {
       })
       .then(({ error }) => {
         if (error) {
-          console.error(error);
+          console.error('setSession error:', error);
           toast({
             variant: 'destructive',
             title: 'Chyba',
-            description: 'Nepodarilo sa overiť odkaz na zmenu hesla.',
+            description: 'Link na zmenu hesla je neplatný alebo vypršal.',
           });
           navigate('/login');
         } else {
@@ -66,7 +66,7 @@ const UpdatePassword = () => {
       toast({
         variant: 'destructive',
         title: 'Chyba',
-        description: 'Heslo musí mať minimálne 8 znakov.',
+        description: 'Heslo musí mať min. 8 znakov.',
       });
       return;
     }
@@ -88,18 +88,17 @@ const UpdatePassword = () => {
       });
 
       if (error) {
-        console.error(error);
         toast({
           variant: 'destructive',
           title: 'Chyba',
-          description: error.message || 'Nepodarilo sa zmeniť heslo.',
+          description: error.message,
         });
         return;
       }
 
       toast({
-        title: 'Heslo zmenené',
-        description: 'Môžete sa prihlásiť novým heslom.',
+        title: 'Úspech',
+        description: 'Heslo bolo úspešne zmenené. Môžete sa prihlásiť.',
       });
 
       navigate('/login');
@@ -131,7 +130,9 @@ const UpdatePassword = () => {
 
       <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-2xl shadow-lg border border-slate-100">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-900">Nastavenie nového hesla</h2>
+          <h2 className="text-2xl font-bold text-slate-900">
+            Nastavenie nového hesla
+          </h2>
           <p className="mt-2 text-slate-600 text-sm">
             Zadajte svoje nové heslo.
           </p>
