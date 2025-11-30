@@ -108,7 +108,7 @@ function App() {
   }
 
   return (
-    <>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-50">
       <Helmet>
         <title>Libellius - Virtuálny zákazník</title>
         <meta
@@ -117,64 +117,67 @@ function App() {
         />
       </Helmet>
 
-      <Routes>
-        {/* Auth stránky */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+      {/* Centrálne plátno aplikácie */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+        <Routes>
+          {/* Auth stránky */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Reset hesla – podporujeme /update-password aj /auth/update-password */}
-        <Route path="/update-password" element={<UpdatePassword />} />
-        <Route path="/auth/update-password" element={<UpdatePassword />} />
+          {/* Reset hesla – podporujeme /update-password aj /auth/update-password */}
+          <Route path="/update-password" element={<UpdatePassword />} />
+          <Route path="/auth/update-password" element={<UpdatePassword />} />
 
-        {/* Callback (napr. magic linky) */}
-        <Route path="/auth/callback" element={<Callback />} />
+          {/* Callback (napr. magic linky) */}
+          <Route path="/auth/callback" element={<Callback />} />
 
-        {/* Chránené časti aplikácie */}
-        <Route
-          path="/dashboard"
-          element={
-            <RequireAuth>
-              <Dashboard />
-            </RequireAuth>
-          }
-        />
+          {/* Chránené časti aplikácie */}
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <Dashboard />
+              </RequireAuth>
+            }
+          />
 
-        <Route
-          path="/profile"
-          element={
-            <RequireAuth>
-              <ProfilePage />
-            </RequireAuth>
-          }
-        />
+          <Route
+            path="/profile"
+            element={
+              <RequireAuth>
+                <ProfilePage />
+              </RequireAuth>
+            }
+          />
 
-        <Route
-          path="/modules/:moduleCode"
-          element={
-            <RequireAuth>
-              <ModuleDetail />
-            </RequireAuth>
-          }
-        />
+          <Route
+            path="/modules/:moduleCode"
+            element={
+              <RequireAuth>
+                <ModuleDetail />
+              </RequireAuth>
+            }
+          />
 
-        <Route
-          path="/session/:sessionId"
-          element={
-            <RequireAuth>
-              <SimulationPage />
-            </RequireAuth>
-          }
-        />
+          <Route
+            path="/session/:sessionId"
+            element={
+              <RequireAuth>
+                <SimulationPage />
+              </RequireAuth>
+            }
+          />
 
-        {/* Default a fallback */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+          {/* Default a fallback */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </div>
 
       {/* Libo je viditeľný len pre prihlásených používateľov, na všetkých stránkach */}
       {session && <LiboChat />}
-    </>
+    </div>
   );
 }
 
