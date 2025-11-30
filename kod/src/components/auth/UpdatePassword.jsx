@@ -1,143 +1,111 @@
-// src/components/auth/UpdatePassword.jsx
-
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
-import { supabase } from '@/lib/customSupabaseClient';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
-
-function getHashParams() {
-  // Môžeš mať rôzne tvary:
-  // 1) /update-password#access_token=...
-  // 2) /#/update-password#access_token=...
-  // 3) /#/update-password?token=...
-  // 4) /update-password#token=...
-  let hash = window.location.hash || '';
-
-  // odstránime prvé #
-  if (hash.startsWith('#')) {
-    hash = hash.slice(1); // napr. "access_token=..." alebo "/update-password#access_token=..."
-  }
-
-  // ak je tam ešte jedno '#', vezmeme časť až za ním (HashRouter route + hash Supabase)
-  const secondHashIndex = hash.indexOf('#');
-  if (secondHashIndex !== -1) {
-    hash = hash.slice(secondHashIndex + 1); // "access_token=..."
-  }
-
-  // ak je tam path + query (napr. "/update-password?token=...")
-  if (hash.includes('?')) {
-    hash = hash.split('?')[1];
-  }
-
-  return new URLSearchParams(hash);
-}
+import React, { useEffect, useState } from "react";
+import { Helmet } from "react-helmet";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/customSupabaseClient";
+import { useToast } from "@/components/ui/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 const UpdatePassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [isReady, setIsReady] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-
   const [formData, setFormData] = useState({
-    password: '',
-    confirmPassword: '',
+    password: "",
+    confirmPassword: "",
   });
 
-  // 1) Po mountnutí spracujeme token z URL a nastavíme Supabase session
+  const [isReady, setIsReady] = useState(false);      // či môžeme ukázať formulár
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 1. Pri načítaní stránky spracuj token z URL hash-u a nastav session
   useEffect(() => {
-    const init = async () => {
+    const initFromHash = async () => {
       try {
-        const params = getHashParams();
+        const hash = window.location.hash || "";
 
-        const access_token =
-          params.get('access_token') || // Supabase štandard
-          params.get('token');          // fallback, keby bol iný template
-
-        const refresh_token = params.get('refresh_token') || '';
-        const type = params.get('type'); // "recovery" pri obnove hesla
-
-        if (!access_token) {
-          console.error('Nebolo možné nájsť token v hash URL:', window.location.hash);
+        if (!hash.includes("access_token")) {
           toast({
-            variant: 'destructive',
-            title: 'Neplatný odkaz',
-            description: 'Odkaz na obnovu hesla je neplatný alebo poškodený. Skúste si vyžiadať nový.'
+            variant: "destructive",
+            title: "Chyba",
+            description:
+              "Chýba token pre obnovu hesla. Skúste si poslať e-mail na obnovu znova.",
           });
-          navigate('/login');
           return;
         }
 
-        if (type && type !== 'recovery') {
+        // hash začína "#access_token=..."
+        const params = new URLSearchParams(hash.substring(1));
+        const access_token = params.get("access_token");
+        const refresh_token = params.get("refresh_token");
+
+        if (!access_token) {
           toast({
-            variant: 'destructive',
-            title: 'Neplatný odkaz',
-            description: 'Tento odkaz neslúži na obnovu hesla. Skúste sa prihlásiť alebo vyžiadať nový odkaz.'
+            variant: "destructive",
+            title: "Chyba",
+            description:
+              "Token pre obnovu hesla nie je platný. Skúste to prosím znova.",
           });
-          navigate('/login');
           return;
         }
 
         const { error } = await supabase.auth.setSession({
           access_token,
-          refresh_token,
+          // refresh token môže, ale nemusí byť
+          ...(refresh_token ? { refresh_token } : {}),
         });
 
         if (error) {
-          console.error('Supabase setSession error:', error);
+          console.error("setSession error:", error);
           toast({
-            variant: 'destructive',
-            title: 'Odkaz expiroval',
-            description: 'Odkaz na obnovu hesla už pravdepodobne expiroval. Skúste si vyžiadať nový.'
+            variant: "destructive",
+            title: "Chyba",
+            description:
+              "Token už neplatí alebo je neplatný. Požiadajte o nový e-mail na obnovu hesla.",
           });
-          navigate('/login');
-          return;
         }
-
-        // všetko OK → zobraz formulár
-        setIsReady(true);
       } catch (err) {
-        console.error('Chyba pri inicializácii stránky na obnovu hesla:', err);
+        console.error("initFromHash error:", err);
         toast({
-          variant: 'destructive',
-          title: 'Chyba',
-          description: 'Nepodarilo sa načítať stránku na zmenu hesla. Skúste to znova alebo si vyžiadajte nový odkaz.'
+          variant: "destructive",
+          title: "Chyba",
+          description:
+            "Nepodarilo sa načítať údaje na obnovu hesla. Skúste to prosím znova.",
         });
-        navigate('/login');
+      } finally {
+        // kľúčové: vždy povolíme zobraziť formulár, aby neskončil v nekonečnom spinnere
+        setIsReady(true);
       }
     };
 
-    init();
-  }, [navigate, toast]);
+    initFromHash();
+  }, [toast]);
 
-  // 2) Odoslanie nového hesla
+  // 2. Odoslanie formulára – reálna zmena hesla
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (formData.password.length < 8) {
       toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Heslo musí mať minimálne 8 znakov.'
+        variant: "destructive",
+        title: "Chyba",
+        description: "Heslo musí mať minimálne 8 znakov.",
       });
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
       toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Heslá sa nezhodujú.'
+        variant: "destructive",
+        title: "Chyba",
+        description: "Heslá sa nezhodujú.",
       });
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
 
     try {
       const { error } = await supabase.auth.updateUser({
@@ -145,43 +113,43 @@ const UpdatePassword = () => {
       });
 
       if (error) {
-        console.error('Supabase updateUser error:', error);
+        console.error("updateUser error:", error);
         toast({
-          variant: 'destructive',
-          title: 'Chyba pri zmene hesla',
-          description: error.message || 'Nepodarilo sa zmeniť heslo. Skúste to prosím znova.'
+          variant: "destructive",
+          title: "Chyba",
+          description: error.message || "Nepodarilo sa zmeniť heslo.",
         });
         return;
       }
 
       toast({
-        title: 'Heslo zmenené',
-        description: 'Vaše heslo bolo úspešne zmenené. Môžete sa prihlásiť novým heslom.'
+        title: "Heslo bolo zmenené",
+        description: "Teraz sa môžete prihlásiť novým heslom.",
       });
 
-      navigate('/login');
+      navigate("/login");
     } catch (err) {
-      console.error('Neočakávaná chyba pri zmene hesla:', err);
+      console.error("updateUser catch error:", err);
       toast({
-        variant: 'destructive',
-        title: 'Chyba',
-        description: 'Nastala neočakávaná chyba. Skúste to prosím znova.'
+        variant: "destructive",
+        title: "Chyba",
+        description: "Nastala neočakávaná chyba pri zmene hesla.",
       });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  // 3) Kým nemáme potvrdenú session, ukážeme len spinner (max pár sekúnd)
+  // 3. Kým spracúvame hash -> loader, ale už sa nezacyklí
   if (!isReady) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50">
         <Loader2 className="h-8 w-8 animate-spin text-[#B81547]" />
       </div>
     );
   }
 
-  // 4) Formulár na zadanie nového hesla
+  // 4. Formulár na nastavenie nového hesla
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <Helmet>
@@ -190,7 +158,9 @@ const UpdatePassword = () => {
 
       <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-2xl shadow-lg border border-slate-100">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-900">Nastavenie nového hesla</h2>
+          <h2 className="text-2xl font-bold text-slate-900">
+            Nastavenie nového hesla
+          </h2>
           <p className="mt-2 text-slate-600 text-sm">
             Zadajte svoje nové heslo.
           </p>
@@ -204,7 +174,7 @@ const UpdatePassword = () => {
               type="password"
               value={formData.password}
               onChange={(e) =>
-                setFormData({ ...formData, password: e.target.value })
+                setFormData((prev) => ({ ...prev, password: e.target.value }))
               }
               required
               placeholder="Min. 8 znakov"
@@ -218,7 +188,10 @@ const UpdatePassword = () => {
               type="password"
               value={formData.confirmPassword}
               onChange={(e) =>
-                setFormData({ ...formData, confirmPassword: e.target.value })
+                setFormData((prev) => ({
+                  ...prev,
+                  confirmPassword: e.target.value,
+                }))
               }
               required
               placeholder="Zopakujte heslo"
@@ -228,9 +201,9 @@ const UpdatePassword = () => {
           <Button
             type="submit"
             className="w-full bg-[#B81547] hover:bg-[#9e123d] text-white"
-            disabled={isLoading}
+            disabled={isSubmitting}
           >
-            {isLoading && (
+            {isSubmitting && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
             Uložiť nové heslo
