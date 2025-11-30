@@ -10,8 +10,8 @@ const PodcastBanner = () => {
   const appleEmbedUrl =
     'https://embed.podcasts.apple.com/us/podcast/presah/id1669721867?itscg=30200&itsct=podcast_box_player&ls=1&mttnsubad=1669721867&theme=auto';
 
-  // 'spotify' alebo 'apple'
-  const [activeTab, setActiveTab] = useState<'spotify' | 'apple'>('spotify');
+  // ktorá platforma je zvolená: 'spotify' alebo 'apple'
+  const [activeTab, setActiveTab] = useState('spotify');
 
   return (
     <motion.section
@@ -29,40 +29,39 @@ const PodcastBanner = () => {
             Počúvaj priamo v aplikácii
           </h2>
           <p className="text-sm text-slate-600">
-            Vyber si platformu, ktorú používaš najradšej. Epizódu si vieš pustiť
-            priamo v tejto appke, bez preklikávania.
+            Vyber si platformu, ktorú používaš najradšej. Epizódu si vieš
+            pustiť priamo v tejto appke, bez preklikávania.
           </p>
         </header>
 
-        {/* Tab lišta */}
+        {/* prepínač Spotify / Apple */}
         <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-sm font-medium">
           <button
             type="button"
             onClick={() => setActiveTab('spotify')}
-            className={
-              'px-4 py-1.5 rounded-full transition-colors ' +
-              (activeTab === 'spotify'
+            className={`px-4 py-1.5 rounded-full transition-colors ${
+              activeTab === 'spotify'
                 ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-900')
-            }
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
           >
             Spotify
           </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('apple')}
-            className={
-              'px-4 py-1.5 rounded-full transition-colors ' +
-              (activeTab === 'apple'
+            className={`px-4 py-1.5 rounded-full transition-colors ${
+              activeTab === 'apple'
                 ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-900')
-            }
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
           >
             Apple Podcasts
           </button>
         </div>
 
-        {/* Obsah tabu – zobrazíme vždy len jeden prehrávač */}
+        {/* samotné prehrávače */}
         <div className="mt-4">
           {activeTab === 'spotify' && (
             <div>
@@ -72,8 +71,7 @@ const PodcastBanner = () => {
               <iframe
                 src={spotifyEmbedUrl}
                 width="100%"
-                // väčšia výška, aby nebol prehrávač zrezaný
-                height="152"
+                height="152"            // vyššia výška – nebude zrezaný
                 frameBorder="0"
                 scrolling="no"
                 allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
@@ -88,7 +86,7 @@ const PodcastBanner = () => {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
                 Počúvaj na Apple Podcasts
               </p>
-              {/* Zarovnané nalavo – bez centerovania */}
+              {/* zarovnanie doľava – len div s pevnou šírkou, žiadne centerovanie */}
               <div className="w-full">
                 <iframe
                   src={appleEmbedUrl}
