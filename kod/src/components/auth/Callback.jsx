@@ -7,46 +7,57 @@ const Callback = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const process = async () => {
+    let subscription;
+
+    const run = async () => {
       try {
-        const rawHash = window.location.hash || "";
+        const hash = window.location.hash || '';
+        const hashString = hash.startsWith('#') ? hash.slice(1) : hash;
+        const params = new URLSearchParams(hashString);
+        const type = params.get('type'); // napr. 'recovery'
 
-        // Rozdelíme hash na časti
-        // #/auth/update-password#access_token=XYZ&type=recovery
-        const parts = rawHash.split("#");
-
-        const routerHash = parts.find(p => p.startsWith("/"));
-        const tokenHash = parts.find(p => p.startsWith("access_token"));
-
-        const isRecovery =
-          (tokenHash && tokenHash.includes("type=recovery")) ||
-          rawHash.includes("type=recovery");
-
-        // RESET HESLA → presmeruj na stránku update-password
-        if (isRecovery) {
-          navigate("/auth/update-password");
-          return;
-        }
-
-        // Počkaj na session
+        // 1) Skúsime hneď zistiť session
         const { data: { session } } = await supabase.auth.getSession();
 
-        // Normálne prihlásenie
+        // Ak už máme session v momente načítania
         if (session) {
-          navigate("/dashboard");
+          if (type === 'recovery') {
+            navigate('/update-password', { replace: true });
+            return;
+          }
+          navigate('/dashboard', { replace: true });
           return;
         }
 
-        // Ak nič nesedí → login
-        navigate("/login");
+        // 2) Ak session ešte nie je, počkáme na auth eventy
+        const { data } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === 'PASSWORD_RECOVERY') {
+            // Supabase oznámil recovery flow
+            navigate('/update-password', { replace: true });
+          } else if (event === 'SIGNED_IN') {
+            const currentHash = window.location.hash || '';
+            if (currentHash.includes('type=recovery')) {
+              navigate('/update-password', { replace: true });
+            } else {
+              navigate('/dashboard', { replace: true });
+            }
+          } else if (event === 'SIGNED_OUT') {
+            navigate('/login', { replace: true });
+          }
+        });
 
-      } catch (err) {
-        console.error("Callback error:", err);
-        navigate("/login");
+        subscription = data.subscription;
+      } catch (error) {
+        console.error('Auth callback error:', error);
+        navigate('/login', { replace: true });
       }
     };
 
-    process();
+    run();
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, [navigate]);
 
   return (
