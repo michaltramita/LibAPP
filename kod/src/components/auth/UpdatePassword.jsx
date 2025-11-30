@@ -19,31 +19,33 @@ const UpdatePassword = () => {
     confirmPassword: '',
   });
 
-  // 1) Po načítaní stránky spracujeme URL hash a nastavíme Supabase session
+  // Spracovanie recovery linku z URL (hash)
   useEffect(() => {
     const hash = window.location.hash || '';
 
-    // Supabase pri chybe pošle napr.:
-    // #error=access_denied&error_code=otp_expired&error_description=...
+    // 1) Ak Supabase vráti chybu (expirovaný link a pod.)
     if (hash.includes('error=')) {
       const params = new URLSearchParams(hash.substring(1));
       const description =
         params.get('error_description') || 'Odkaz na zmenu hesla je neplatný.';
+
       toast({
         variant: 'destructive',
         title: 'Chyba',
         description: decodeURIComponent(description.replace(/\+/g, ' ')),
       });
+
       navigate('/login');
       return;
     }
 
+    // 2) Ak v hashi nie je access_token, presmeruj na login
     if (!hash.includes('access_token')) {
       navigate('/login');
       return;
     }
 
-    // hash = "#access_token=...&refresh_token=...&..."
+    // hash má tvar: #access_token=...&refresh_token=...&...
     const params = new URLSearchParams(hash.substring(1));
     const access_token = params.get('access_token');
     const refresh_token = params.get('refresh_token');
@@ -53,7 +55,10 @@ const UpdatePassword = () => {
       return;
     }
 
-    // Nastavíme session z recovery linku
+    // 3) Najprv zobraz formulár (užívateľ nemusí čakať na setSession)
+    setIsReady(true);
+
+    // 4) Paralelne nastav session, aby Supabase vedel, ktorý účet mení heslo
     supabase.auth
       .setSession({
         access_token,
@@ -67,12 +72,10 @@ const UpdatePassword = () => {
             title: 'Chyba',
             description:
               error.message ||
-              'Odkaz na zmenu hesla je neplatný alebo vypršal.',
+              'Odkaz na zmenu hesla je neplatný alebo mu vypršala platnosť.',
           });
           navigate('/login');
-          return;
         }
-        setIsReady(true);
       });
   }, [navigate, toast]);
 
@@ -83,7 +86,7 @@ const UpdatePassword = () => {
       toast({
         variant: 'destructive',
         title: 'Chyba',
-        description: 'Heslo musí mať min. 8 znakov.',
+        description: 'Heslo musí mať minimálne 8 znakov.',
       });
       return;
     }
@@ -110,29 +113,30 @@ const UpdatePassword = () => {
           variant: 'destructive',
           title: 'Chyba',
           description:
-            error.message ||
-            'Nepodarilo sa zmeniť heslo. Skúste to prosím znova.',
+            error.message || 'Nepodarilo sa zmeniť heslo. Skúste to znova.',
         });
         return;
       }
 
       toast({
         title: 'Úspech',
-        description: 'Heslo bolo úspešne zmenené. Môžete sa prihlásiť.',
+        description: 'Heslo bolo úspešne zmenené. Teraz sa môžete prihlásiť.',
       });
+
       navigate('/login');
     } catch (err) {
-      console.error('Password update exception:', err);
+      console.error('Unexpected error:', err);
       toast({
         variant: 'destructive',
         title: 'Chyba',
-        description: 'Nastala neočakávaná chyba pri komunikácii so serverom.',
+        description: 'Nastala neočakávaná chyba. Skúste to prosím znova.',
       });
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Kým nevieme, či máme validný token, zobraz len loader
   if (!isReady) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -163,9 +167,10 @@ const UpdatePassword = () => {
             <Input
               id="password"
               type="password"
+              autoComplete="new-password"
               value={formData.password}
               onChange={(e) =>
-                setFormData({ ...formData, password: e.target.value })
+                setFormData((prev) => ({ ...prev, password: e.target.value }))
               }
               required
               placeholder="Min. 8 znakov"
@@ -177,9 +182,13 @@ const UpdatePassword = () => {
             <Input
               id="confirmPassword"
               type="password"
+              autoComplete="new-password"
               value={formData.confirmPassword}
               onChange={(e) =>
-                setFormData({ ...formData, confirmPassword: e.target.value })
+                setFormData((prev) => ({
+                  ...prev,
+                  confirmPassword: e.target.value,
+                }))
               }
               required
               placeholder="Zopakujte heslo"
