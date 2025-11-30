@@ -7,14 +7,12 @@ import { AuthProvider } from './contexts/SupabaseAuthContext';
 import { Toaster } from './components/ui/toaster';
 
 const Root = () => (
-  <>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-        <Toaster />
-      </AuthProvider>
-    </BrowserRouter>
-  </>
+  <BrowserRouter>
+    <AuthProvider>
+      <App />
+      <Toaster />
+    </AuthProvider>
+  </BrowserRouter>
 );
 
 ReactDOM.createRoot(document.getElementById('root')).render(
