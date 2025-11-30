@@ -13,20 +13,22 @@ const UpdatePassword = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [initializing, setInitializing] = useState(true); // spracovanie tokenu z URL
-  const [saving, setSaving] = useState(false);            // ukladanie nového hesla
+  // initializing = spracovanie tokenu z URL
+  const [initializing, setInitializing] = useState(true);
+  // saving = ukladanie nového hesla
+  const [saving, setSaving] = useState(false);
+
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
   });
 
-  // 1) Spracovanie access_token a refresh_token z URL hash
   useEffect(() => {
     const initRecoverySession = async () => {
       try {
         const hash = window.location.hash || '';
 
-        // očakávame tvar: #access_token=...&refresh_token=...&type=recovery
+        // očakávame: #access_token=...&refresh_token=...&type=recovery
         if (!hash.includes('access_token')) {
           toast({
             variant: 'destructive',
@@ -73,7 +75,7 @@ const UpdatePassword = () => {
           return;
         }
 
-        // session je nastavená, môžeme zobraziť formulár
+        // tu už existuje session → môžeme zobraziť formulár
         setInitializing(false);
       } catch (err) {
         console.error('Unexpected init error:', err);
@@ -89,7 +91,6 @@ const UpdatePassword = () => {
     initRecoverySession();
   }, [navigate, toast]);
 
-  // 2) Odoslanie formulára – samotná zmena hesla
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -149,7 +150,7 @@ const UpdatePassword = () => {
     }
   };
 
-  // 3) Loader počas spracovania tokenu
+  // loader počas spracovania tokenu
   if (initializing) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -158,7 +159,7 @@ const UpdatePassword = () => {
     );
   }
 
-  // 4) Formulár na nové heslo
+  // samotný formulár
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <Helmet>
