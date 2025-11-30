@@ -10,7 +10,7 @@ const PodcastBanner = () => {
   const appleEmbedUrl =
     'https://embed.podcasts.apple.com/us/podcast/presah/id1669721867?itscg=30200&itsct=podcast_box_player&ls=1&mttnsubad=1669721867&theme=auto';
 
-  // 'spotify' alebo 'apple' – bez TS typov
+  // 'spotify' alebo 'apple'
   const [activeTab, setActiveTab] = useState('spotify');
 
   return (
@@ -51,7 +51,7 @@ const PodcastBanner = () => {
           <button
             type="button"
             onClick={() => setActiveTab('apple')}
-            className={
+            className=
               'px-4 py-1.5 rounded-full transition-colors ' +
               (activeTab === 'apple'
                 ? 'bg-white text-slate-900 shadow-sm'
@@ -72,7 +72,8 @@ const PodcastBanner = () => {
               <iframe
                 src={spotifyEmbedUrl}
                 width="100%"
-                height="102"
+                // zväčšená výška, aby nebol prehrávač zrezaný
+                height="152"
                 frameBorder="0"
                 scrolling="no"
                 allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
@@ -87,7 +88,8 @@ const PodcastBanner = () => {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
                 Počúvaj na Apple Podcasts
               </p>
-              <div className="w-full flex justify-center">
+              {/* odstránené centerovanie, nech je prehrávač zarovnaný vľavo */}
+              <div className="w-full">
                 <iframe
                   src={appleEmbedUrl}
                   title="Prehrávač podcastu PRESAH – Apple Podcasts"
