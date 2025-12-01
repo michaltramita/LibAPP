@@ -24,7 +24,7 @@ import ModuleDetail from '@/components/ModuleDetail';
 import ProfilePage from '@/components/ProfilePage';
 import FeedbackPanel from '@/components/FeedbackPanel';
 
-// stránka so simuláciou + feedbackom
+// Wrapper pre simuláciu (feedback alebo simulátor)
 const SimulationPage = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -104,7 +104,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#B81457]">
+    <>
       <Helmet>
         <title>Libellius - Virtuálny zákazník</title>
         <meta
@@ -113,57 +113,12 @@ function App() {
         />
       </Helmet>
 
-      <main className="flex-1">
+      {/* BIELE pozadie celej aplikácie */}
+      <div className="min-h-screen bg-white text-slate-900">
         <Routes>
           {/* Auth stránky */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/update-password" element={<UpdatePassword />} />
-          <Route path="/auth/update-password" element={<UpdatePassword />} />
-          <Route path="/auth/callback" element={<Callback />} />
 
-          {/* Chránené časti aplikácie */}
-          <Route
-            path="/dashboard"
-            element={
-              <RequireAuth>
-                <Dashboard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <RequireAuth>
-                <ProfilePage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/modules/:moduleCode"
-            element={
-              <RequireAuth>
-                <ModuleDetail />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/session/:sessionId"
-            element={
-              <RequireAuth>
-                <SimulationPage />
-              </RequireAuth>
-            }
-          />
-
-          {/* Default a fallback */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </main>
-    </div>
-  );
-}
-
-export default App;
+          {/*
