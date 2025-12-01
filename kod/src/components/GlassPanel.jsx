@@ -1,15 +1,17 @@
+// src/components/GlassPanel.jsx
 import React from 'react';
-import clsx from 'clsx';
 
-const GlassPanel = ({ className, children }) => {
+const GlassPanel = ({ children, className = '' }) => {
   return (
     <div
-      className={clsx(
-        'rounded-3xl border border-white/15 bg-white/10',
-        'backdrop-blur-xl shadow-2xl shadow-black/40',
-        'bg-gradient-to-br from-white/15 via-white/5 to-white/0',
-        className
-      )}
+      className={`
+        rounded-3xl
+        bg-white/12
+        border border-white/30
+        backdrop-blur-xl
+        shadow-[0_18px_45px_rgba(0,0,0,0.45)]
+        ${className}
+      `}
     >
       {children}
     </div>
