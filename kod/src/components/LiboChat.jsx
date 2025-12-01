@@ -9,7 +9,6 @@ const LiboAvatar = ({ size = 32 }) => (
     className="rounded-full object-cover bg-slate-200"
     style={{ width: size, height: size }}
     onError={(e) => {
-      // fallback, ak obrázok neexistuje
       e.currentTarget.style.display = 'none';
     }}
   />
@@ -39,9 +38,18 @@ const LiboChat = () => {
     setIsSending(true);
 
     try {
-      // zatiaľ len jednoduchá odpoveď – neskôr sa sem doplní API
+      // Volanie AI endpointu
+      const res = await fetch('/api/ai-client-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: trimmed }),
+      });
+
+      const data = await res.json();
+
       const replyText =
-        'Som v testovacej verzii. Napíš mi, či riešiš login, modul, simuláciu alebo vyhodnotenie a skúsim ťa nasmerovať.';
+        data.reply ||
+        'Ospravedlňujem sa, ale odpoveď sa nepodarilo načítať. Skús to prosím znova.';
 
       const liboMessage = { role: 'libo', text: replyText };
       setMessages((prev) => [...prev, liboMessage]);
