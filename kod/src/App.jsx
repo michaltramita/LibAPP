@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useState } from 'react';
 import {
   Routes,
@@ -23,8 +24,9 @@ import SalesMeetingSimulator from '@/components/SalesMeetingSimulator';
 import ModuleDetail from '@/components/ModuleDetail';
 import ProfilePage from '@/components/ProfilePage';
 import FeedbackPanel from '@/components/FeedbackPanel';
+import LiboChat from '@/components/LiboChat';
 
-// Stránka pre simuláciu – buď beží simulátor, alebo zobrazíme feedback
+// wrapper pre simuláciu
 const SimulationPage = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -113,59 +115,55 @@ function App() {
         />
       </Helmet>
 
-      {/* Globálne biele pozadie aplikácie */}
-      <div className="min-h-screen bg-white text-slate-900">
-        <Routes>
-          {/* Auth stránky */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/update-password" element={<UpdatePassword />} />
-          <Route path="/auth/update-password" element={<UpdatePassword />} />
-          <Route path="/auth/callback" element={<Callback />} />
+      <Routes>
+        {/* Auth stránky */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/update-password" element={<UpdatePassword />} />
+        <Route path="/auth/update-password" element={<UpdatePassword />} />
+        <Route path="/auth/callback" element={<Callback />} />
 
-          {/* Chránené sekcie */}
-          <Route
-            path="/dashboard"
-            element={
-              <RequireAuth>
-                <Dashboard />
-              </RequireAuth>
-            }
-          />
+        {/* Chránené časti */}
+        <Route
+          path="/dashboard"
+          element={
+            <RequireAuth>
+              <Dashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <RequireAuth>
+              <ProfilePage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/modules/:moduleCode"
+          element={
+            <RequireAuth>
+              <ModuleDetail />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/session/:sessionId"
+          element={
+            <RequireAuth>
+              <SimulationPage />
+            </RequireAuth>
+          }
+        />
 
-          <Route
-            path="/profile"
-            element={
-              <RequireAuth>
-                <ProfilePage />
-              </RequireAuth>
-            }
-          />
+        {/* Default a fallback */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
 
-          <Route
-            path="/modules/:moduleCode"
-            element={
-              <RequireAuth>
-                <ModuleDetail />
-              </RequireAuth>
-            }
-          />
-
-          <Route
-            path="/session/:sessionId"
-            element={
-              <RequireAuth>
-                <SimulationPage />
-              </RequireAuth>
-            }
-          />
-
-          {/* Default a fallback */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </div>
+      {session && <LiboChat />}
     </>
   );
 }
