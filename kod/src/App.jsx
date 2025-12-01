@@ -23,7 +23,6 @@ import SalesMeetingSimulator from '@/components/SalesMeetingSimulator';
 import ModuleDetail from '@/components/ModuleDetail';
 import ProfilePage from '@/components/ProfilePage';
 import FeedbackPanel from '@/components/FeedbackPanel';
-import LiboChat from '@/components/LiboChat';
 
 // stránka so simuláciou + feedbackom
 const SimulationPage = () => {
@@ -163,9 +162,6 @@ function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
-
-      {/* Libo len raz, globálne, iba pre prihlásených */}
-      {session && <LiboChat />}
     </div>
   );
 }
