@@ -3,8 +3,9 @@ import React, { useState } from 'react';
 const PodcastBanner = () => {
   const [activePlayer, setActivePlayer] = useState('spotify');
 
+  // FUNGUJÚCI Spotify embed z tvojho pôvodného iframe
   const spotifyEmbed =
-    'https://open.spotify.com/embed/episode/3lKLVznESL0H0nU7Dq3uPl?utm_source=generator&theme=0';
+    'https://creators.spotify.com/pod/profile/presahpodcast/embed/episodes/Bez-ud--ktor-ij-firemn-hodnoty--sa-kultra-ned-ovplyvni-ani-vytvori---Tatiana-Ondrejkov-Pelikan-sk-leadership-e3atod6';
 
   const appleEmbed =
     'https://embed.podcasts.apple.com/us/podcast/presah/id1669721867?itscg=30200&itsct=podcast_box_player&ls=1&theme=auto';
@@ -12,7 +13,6 @@ const PodcastBanner = () => {
   return (
     <section className="mt-10">
       <div className="rounded-3xl bg-white/80 backdrop-blur border border-slate-200/70 shadow-lg px-6 py-5 md:px-8 md:py-6">
-        {/* Nadpisy – tmavý text */}
         <div className="mb-4">
           <p className="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
             Podcast PRESAH
@@ -21,12 +21,11 @@ const PodcastBanner = () => {
             Počúvaj priamo v aplikácii
           </h3>
           <p className="mt-1 text-sm text-slate-700">
-            Vyber si platformu, ktorú používaš najradšej. Epizódu si vieš
-            pustiť priamo v tejto appke, bez preklikávania.
+            Vyber si platformu, ktorú používaš najradšej. Epizódu si vieš pustiť
+            priamo v tejto appke, bez preklikávania.
           </p>
         </div>
 
-        {/* Prepínanie prehrávača */}
         <div className="mb-4 flex gap-3 border-b border-slate-200 pb-2">
           <button
             type="button"
@@ -52,7 +51,6 @@ const PodcastBanner = () => {
           </button>
         </div>
 
-        {/* Player */}
         <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white">
           {activePlayer === 'spotify' ? (
             <iframe
