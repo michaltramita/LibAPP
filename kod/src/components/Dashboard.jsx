@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import GlassPanel from '@/components/GlassPanel';
 
 const Dashboard = () => {
   const { profile, signOut, session } = useAuth();
@@ -34,12 +35,11 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        const { data: responseData, error } = await supabase.functions.invoke(
-          'dashboard-data'
-        );
+        const { data: responseData, error } =
+          await supabase.functions.invoke('dashboard-data');
 
         if (error) throw new Error(error.message || 'An unknown error occurred.');
-        if (responseData?.error) throw new Error(responseData.error);
+        if (responseData.error) throw new Error(responseData.error);
 
         setData(responseData);
       } catch (error) {
@@ -65,23 +65,21 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-4 md:px-0 md:py-0">
-      {/* horný „glass“ header */}
-      <header className="max-w-7xl mx-auto mb-6">
-        <div className="flex items-center justify-between rounded-full bg-white/5 border border-white/10 shadow-[0_18px_60px_rgba(15,23,42,0.65)] backdrop-blur-2xl px-4 py-2 md:px-6">
+    <div className="min-h-screen bg-gradient-to-b from-[#B81457] via-[#B81457] to-[#5f0930] text-slate-50">
+      {/* Horný „liquid glass“ header */}
+      <header className="px-4 pt-4">
+        <GlassPanel className="max-w-7xl mx-auto flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 border border-white/20 shadow-inner">
-              <img
-                src="https://horizons-cdn.hostinger.com/c7c4800e-7b32-471c-852f-a05cb57f1e91/083d123c3cdbe84b7f967b880b085698.png"
-                alt="Libellius logo"
-                className="h-6 w-6 object-contain"
-              />
+            <div className="h-9 w-9 rounded-full bg-white/20 flex items-center justify-center">
+              <span className="text-xs font-semibold text-white">
+                L
+              </span>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-200/80">
+              <h1 className="font-semibold text-sm md:text-base tracking-[0.16em] uppercase text-white/80">
                 Libellius – LibApp
-              </p>
-              <p className="text-[11px] text-slate-300/70">
+              </h1>
+              <p className="text-[11px] md:text-xs text-white/70">
                 Tvoj AI pomocník pre obchod a leadership
               </p>
             </div>
@@ -91,16 +89,20 @@ const Dashboard = () => {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                className="relative h-10 w-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/20"
+                className="relative h-9 w-9 md:h-10 md:w-10 rounded-full bg-white/10 hover:bg-white/20"
               >
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs bg-[#B81547]/10 text-slate-50">
+                <Avatar className="h-9 w-9 md:h-10 md:w-10">
+                  <AvatarFallback className="bg-transparent text-white text-sm">
                     {getInitials(profile?.first_name, profile?.last_name)}
                   </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
+            <DropdownMenuContent
+              className="w-56"
+              align="end"
+              forceMount
+            >
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">
@@ -123,18 +125,18 @@ const Dashboard = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
+        </GlassPanel>
       </header>
 
-      {/* hlavná glass karta */}
-      <main className="max-w-7xl mx-auto">
-        <div className="rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.75)] px-5 py-6 md:px-8 md:py-8">
-          <div className="flex flex-col md:flex-row md:items-baseline md:justify-between gap-2 mb-6">
+      {/* Hlavný „sklený“ obsah */}
+      <main className="px-4 pb-10">
+        <GlassPanel className="max-w-7xl mx-auto mt-6 p-6 md:p-8 space-y-8">
+          <div className="flex justify-between items-start mb-2">
             <div>
-              <h2 className="text-xl md:text-2xl font-semibold text-slate-50 mb-1">
-                Vitajte späť, {profile?.first_name || 'používateľ'}!
+              <h2 className="text-2xl font-bold text-white mb-2">
+                Vitajte späť, {profile?.first_name || 'používateľ'}.
               </h2>
-              <p className="text-sm text-slate-200/80">
+              <p className="text-sm text-white/80">
                 Tu je prehľad vašich doterajších aktivít a výsledkov.
               </p>
             </div>
@@ -150,25 +152,25 @@ const Dashboard = () => {
                   <RecentSessions sessions={data.recent_sessions} />
                 </>
               ) : (
-                <div className="text-center py-10 px-4 rounded-2xl border border-dashed border-white/20 bg-slate-900/30">
-                  <BarChart2 className="mx-auto h-10 w-10 text-slate-300/70" />
-                  <h3 className="mt-4 text-lg font-semibold text-slate-50">
+                <div className="text-center py-10 px-4 rounded-3xl border border-dashed border-white/35 bg-black/10">
+                  <BarChart2 className="mx-auto h-10 w-10 text-white/70" />
+                  <h3 className="mt-4 text-lg font-semibold text-white">
                     Zatiaľ žiadne dáta
                   </h3>
-                  <p className="mt-2 text-sm text-slate-200/80">
-                    Absolvujte svoje prvé simulované stretnutie a sledujte svoj
-                    pokrok.
+                  <p className="mt-2 text-sm text-white/80">
+                    Absolvujte svoje prvé simulované stretnutie a sledujte svoj pokrok.
                   </p>
                 </div>
               )}
 
-              {/* TU sa zobrazujú moduly */}
+              {/* Dostupné moduly rozdelené na SALES / LEADERSHIP */}
               <ModuleSelector modules={data.modules} />
 
+              {/* Podcast PRESAH – sklený panel, zarovnaný naľavo */}
               <PodcastBanner />
             </div>
           ) : null}
-        </div>
+        </GlassPanel>
       </main>
     </div>
   );
