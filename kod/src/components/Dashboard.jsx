@@ -65,8 +65,8 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen px-4 py-4 md:px-8 md:py-6">
-      {/* Glass header bar */}
+    <div className="min-h-screen px-4 py-4 md:px-0 md:py-0">
+      {/* horný „glass“ header */}
       <header className="max-w-7xl mx-auto mb-6">
         <div className="flex items-center justify-between rounded-full bg-white/5 border border-white/10 shadow-[0_18px_60px_rgba(15,23,42,0.65)] backdrop-blur-2xl px-4 py-2 md:px-6">
           <div className="flex items-center gap-3">
@@ -126,7 +126,7 @@ const Dashboard = () => {
         </div>
       </header>
 
-      {/* Main glass card */}
+      {/* hlavná glass karta */}
       <main className="max-w-7xl mx-auto">
         <div className="rounded-[32px] border border-white/10 bg-white/5 backdrop-blur-2xl shadow-[0_24px_80px_rgba(15,23,42,0.75)] px-5 py-6 md:px-8 md:py-8">
           <div className="flex flex-col md:flex-row md:items-baseline md:justify-between gap-2 mb-6">
@@ -156,12 +156,15 @@ const Dashboard = () => {
                     Zatiaľ žiadne dáta
                   </h3>
                   <p className="mt-2 text-sm text-slate-200/80">
-                    Absolvujte svoje prvé simulované stretnutie a sledujte svoj pokrok.
+                    Absolvujte svoje prvé simulované stretnutie a sledujte svoj
+                    pokrok.
                   </p>
                 </div>
               )}
 
+              {/* TU sa zobrazujú moduly */}
               <ModuleSelector modules={data.modules} />
+
               <PodcastBanner />
             </div>
           ) : null}
