@@ -1,10 +1,8 @@
 // src/components/ModuleSelector.jsx
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
-import GlassPanel from '@/components/GlassPanel';
 
 const ModuleCard = ({ module, index }) => {
   const navigate = useNavigate();
@@ -17,43 +15,62 @@ const ModuleCard = ({ module, index }) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.08 }}
+      transition={{ duration: 0.4, delay: index * 0.05 }}
+      className="
+        glass-chip
+        h-full
+        min-h-[160px]
+        p-5
+        flex flex-col justify-between
+      "
     >
-      <GlassPanel className="h-full flex flex-col justify-between bg-white/16 border-white/35">
-        <div>
-          <h4 className="font-semibold text-base text-white mb-2">
-            {module.title}
-          </h4>
-          <p className="text-xs text-white/80 mb-5">
-            {module.short_description}
-          </p>
-        </div>
-        <Button
-          onClick={handleNavigateToModule}
-          className="w-full group bg-white/90 hover:bg-white text-[#B81457] font-semibold text-xs border border-white/40"
-        >
-          Prejsť do modulu
-          <ArrowRight className="w-3.5 h-3.5 ml-1.5 transition-transform group-hover:translate-x-0.5" />
-        </Button>
-      </GlassPanel>
+      <div>
+        <h4 className="font-semibold text-base text-slate-900 mb-1.5">
+          {module.title}
+        </h4>
+        <p className="text-xs text-slate-700/80 leading-relaxed">
+          {module.short_description}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleNavigateToModule}
+        className="
+          mt-4 inline-flex items-center justify-center
+          w-full rounded-full
+          bg-[#B81457] hover:bg-[#9e123f]
+          text-white text-xs font-medium
+          px-4 py-2.5
+          transition-colors
+          group
+        "
+      >
+        Prejsť do modulu
+        <ArrowRight className="w-3.5 h-3.5 ml-1.5 transition-transform group-hover:translate-x-0.5" />
+      </button>
     </motion.div>
   );
 };
 
-const ModuleSection = ({ title, modules }) => {
+const ModuleSection = ({ title, modules, startIndex }) => {
   if (!modules || modules.length === 0) return null;
 
   return (
-    <div className="space-y-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
+    <section className="space-y-3">
+      <p className="text-[10px] tracking-[0.28em] uppercase text-slate-50/70">
         {title}
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {modules.map((module, index) => (
-          <ModuleCard key={module.code} module={module} index={index} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+        {modules.map((module, idx) => (
+          <ModuleCard
+            key={module.code}
+            module={module}
+            index={startIndex + idx}
+          />
         ))}
       </div>
-    </div>
+    </section>
   );
 };
 
@@ -63,43 +80,49 @@ const ModuleSelector = ({ modules }) => {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.3 }}
-        className="mt-4"
+        transition={{ duration: 0.4, delay: 0.2 }}
+        className="glass-panel p-6 mt-8"
       >
-        <p className="text-sm font-semibold text-white mb-1">
+        <h3 className="text-lg font-semibold text-slate-50 mb-2">
           Dostupné moduly
+        </h3>
+        <p className="text-sm text-slate-100/80">
+          Momentálne nie sú dostupné žiadne tréningové moduly.
         </p>
-        <GlassPanel className="p-4 bg-white/8 border-white/25">
-          <p className="text-sm text-white/80">
-            Momentálne nie sú dostupné žiadne tréningové moduly.
-          </p>
-        </GlassPanel>
       </motion.div>
     );
   }
 
-  // Rozdelenie modulov (podľa názvu – tak, ako si chcel)
+  // Rozdelenie modulov – tu pokojne prispôsob kódy vašim reálnym
   const salesModules = modules.filter((m) =>
-    ['Obchodný rozhovor', 'Tvorba ponúk na mieru'].includes(m.title)
+    ['OR01', 'TP01'].includes(m.code)
   );
-
   const leadershipModules = modules.filter((m) =>
-    ['Individuálny rozhovor', 'Koučing'].includes(m.title)
+    ['IR01', 'KC01'].includes(m.code)
   );
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.3 }}
-      className="space-y-6 mt-4"
+      transition={{ duration: 0.4, delay: 0.2 }}
+      className="mt-8 space-y-8"
     >
-      <h3 className="text-sm font-semibold text-white mb-2">
+      <h3 className="text-lg font-semibold text-slate-50">
         Dostupné moduly
       </h3>
 
-      <ModuleSection title="Sales" modules={salesModules} />
-      <ModuleSection title="Leadership" modules={leadershipModules} />
+      <ModuleSection
+        title="SALES"
+        modules={salesModules}
+        startIndex={0}
+      />
+
+      <ModuleSection
+        title="LEADERSHIP"
+        modules={leadershipModules}
+        startIndex={salesModules.length}
+      />
     </motion.div>
   );
 };
