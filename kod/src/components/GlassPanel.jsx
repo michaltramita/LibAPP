@@ -1,17 +1,20 @@
-// src/components/GlassPanel.jsx
 import React from 'react';
+import { cn } from '@/lib/utils';
 
-const GlassPanel = ({ children, className = '' }) => {
+/**
+ * Svetlý „liquid glass“ panel vhodný na bielom pozadí.
+ * Používa polopriesvitnú bielu, jemný border a blur.
+ */
+const GlassPanel = ({ className, children }) => {
   return (
     <div
-      className={`
-        rounded-3xl
-        bg-white/12
-        border border-white/30
-        backdrop-blur-xl
-        shadow-[0_18px_45px_rgba(0,0,0,0.45)]
-        ${className}
-      `}
+      className={cn(
+        'rounded-3xl border border-slate-200/80',
+        'bg-white/70 backdrop-blur-lg',
+        'shadow-[0_18px_45px_rgba(15,23,42,0.12)]',
+        'transition-colors duration-200',
+        className
+      )}
     >
       {children}
     </div>
