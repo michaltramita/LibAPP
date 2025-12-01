@@ -1,19 +1,10 @@
+// src/components/ModuleSelector.jsx
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import GlassPanel from '@/components/GlassPanel';
-
-const salesTitles = [
-  'Obchodný rozhovor',
-  'Tvorba ponúk na mieru',
-];
-
-const leadershipTitles = [
-  'Individuálny rozhovor',
-  'Koučing',
-];
 
 const ModuleCard = ({ module, index }) => {
   const navigate = useNavigate();
@@ -24,26 +15,25 @@ const ModuleCard = ({ module, index }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.05 }}
-      className="h-full"
+      transition={{ duration: 0.4, delay: index * 0.08 }}
     >
-      <GlassPanel className="h-full flex flex-col justify-between p-5">
+      <GlassPanel className="h-full flex flex-col justify-between bg-white/16 border-white/35">
         <div>
-          <h4 className="font-bold text-base text-slate-900 mb-2">
+          <h4 className="font-semibold text-base text-white mb-2">
             {module.title}
           </h4>
-          <p className="text-sm text-slate-600 mb-5">
+          <p className="text-xs text-white/80 mb-5">
             {module.short_description}
           </p>
         </div>
         <Button
           onClick={handleNavigateToModule}
-          className="w-full group bg-[#B81457] hover:bg-[#9e123d] text-white"
+          className="w-full group bg-white/90 hover:bg-white text-[#B81457] font-semibold text-xs border border-white/40"
         >
           Prejsť do modulu
-          <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+          <ArrowRight className="w-3.5 h-3.5 ml-1.5 transition-transform group-hover:translate-x-0.5" />
         </Button>
       </GlassPanel>
     </motion.div>
@@ -54,16 +44,16 @@ const ModuleSection = ({ title, modules }) => {
   if (!modules || modules.length === 0) return null;
 
   return (
-    <section className="space-y-3">
-      <h4 className="text-xs font-semibold tracking-[0.22em] text-white/70 uppercase">
+    <div className="space-y-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/65">
         {title}
-      </h4>
+      </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {modules.map((module, index) => (
           <ModuleCard key={module.code} module={module} index={index} />
         ))}
       </div>
-    </section>
+    </div>
   );
 };
 
@@ -71,15 +61,16 @@ const ModuleSelector = ({ modules }) => {
   if (!modules || modules.length === 0) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
+        transition={{ duration: 0.4, delay: 0.3 }}
+        className="mt-4"
       >
-        <GlassPanel className="p-6">
-          <h3 className="text-xl font-bold text-slate-900 mb-3">
-            Dostupné moduly
-          </h3>
-          <p className="text-slate-600">
+        <p className="text-sm font-semibold text-white mb-1">
+          Dostupné moduly
+        </p>
+        <GlassPanel className="p-4 bg-white/8 border-white/25">
+          <p className="text-sm text-white/80">
             Momentálne nie sú dostupné žiadne tréningové moduly.
           </p>
         </GlassPanel>
@@ -87,32 +78,28 @@ const ModuleSelector = ({ modules }) => {
     );
   }
 
+  // Rozdelenie modulov (podľa názvu – tak, ako si chcel)
   const salesModules = modules.filter((m) =>
-    salesTitles.includes(m.title),
+    ['Obchodný rozhovor', 'Tvorba ponúk na mieru'].includes(m.title)
   );
+
   const leadershipModules = modules.filter((m) =>
-    leadershipTitles.includes(m.title),
-  );
-  const otherModules = modules.filter(
-    (m) =>
-      !salesTitles.includes(m.title) &&
-      !leadershipTitles.includes(m.title),
+    ['Individuálny rozhovor', 'Koučing'].includes(m.title)
   );
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.2 }}
-      className="space-y-8"
+      transition={{ duration: 0.4, delay: 0.3 }}
+      className="space-y-6 mt-4"
     >
-      <h3 className="text-xl font-bold text-white mb-2">
+      <h3 className="text-sm font-semibold text-white mb-2">
         Dostupné moduly
       </h3>
 
-      <ModuleSection title="SALES" modules={salesModules} />
-      <ModuleSection title="LEADERSHIP" modules={leadershipModules} />
-      <ModuleSection title="OSTATNÉ MODULY" modules={otherModules} />
+      <ModuleSection title="Sales" modules={salesModules} />
+      <ModuleSection title="Leadership" modules={leadershipModules} />
     </motion.div>
   );
 };
