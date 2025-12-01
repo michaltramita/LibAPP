@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 
+const glassCardClasses =
+  'bg-white/70 backdrop-blur border border-slate-200/80 rounded-2xl shadow-[0_18px_45px_rgba(15,23,42,0.08)]';
+
 const ModuleCard = ({ module, index }) => {
   const navigate = useNavigate();
 
@@ -13,45 +16,26 @@ const ModuleCard = ({ module, index }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 18 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: 0.1 + index * 0.05 }}
-      className="
-        relative overflow-hidden
-        rounded-2xl
-        bg-white/12
-        border border-white/18
-        shadow-[0_18px_45px_rgba(0,0,0,0.45)]
-        backdrop-blur-xl
-        px-5 py-4
-        flex flex-col justify-between
-        min-h-[150px]
-      "
+      transition={{ duration: 0.35, delay: index * 0.06 }}
+      className={`${glassCardClasses} p-5 flex flex-col justify-between`}
     >
       <div>
-        <h4 className="font-semibold text-sm md:text-base text-slate-50 mb-1.5">
+        <h4 className="font-semibold text-base text-slate-900 mb-1">
           {module.title}
         </h4>
-        <p className="text-xs md:text-sm text-slate-100/75">
+        <p className="text-sm text-slate-600 mb-4">
           {module.short_description}
         </p>
       </div>
-
-      <div className="mt-4">
-        <Button
-          onClick={handleNavigateToModule}
-          className="
-            w-full group
-            bg-white/90 hover:bg-white
-            text-[#B81457]
-            font-medium text-xs md:text-sm
-            rounded-full
-          "
-        >
-          Prejsť do modulu
-          <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
-        </Button>
-      </div>
+      <Button
+        onClick={handleNavigateToModule}
+        className="w-full group bg-[#B81547] hover:bg-[#9e123d] text-white"
+      >
+        Prejsť do modulu
+        <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+      </Button>
     </motion.div>
   );
 };
@@ -60,94 +44,75 @@ const ModuleSelector = ({ modules }) => {
   if (!modules || modules.length === 0) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-        className="
-          mt-8
-          rounded-3xl
-          bg-white/6
-          border border-white/20
-          shadow-[0_18px_60px_rgba(0,0,0,0.55)]
-          backdrop-blur-2xl
-          px-6 py-6
-        "
+        transition={{ duration: 0.35, delay: 0.15 }}
+        className={`${glassCardClasses} p-6`}
       >
-        <h3 className="text-lg font-semibold text-slate-50 mb-2">
+        <h3 className="text-lg font-bold text-slate-900 mb-2">
           Dostupné moduly
         </h3>
-        <p className="text-sm text-slate-100/80">
+        <p className="text-slate-500 text-sm">
           Momentálne nie sú dostupné žiadne tréningové moduly.
         </p>
       </motion.div>
     );
   }
 
-  // Rozdelenie podľa názvu modulu
-  const salesModules = modules.filter((m) => {
-    const t = (m.title || '').toLowerCase();
-    return t.includes('obchodný') || t.includes('ponúk');
-  });
-
-  const leadershipModules = modules.filter((m) => {
-    const t = (m.title || '').toLowerCase();
-    return t.includes('individuálny') || t.includes('koučing');
-  });
-
-  // Moduly, ktoré nespadajú ani do jednej kategórie
-  const usedCodes = new Set(
-    [...salesModules, ...leadershipModules].map((m) => m.code)
+  // Rozdelenie modulov podľa kódu na SALES a LEADERSHIP
+  const salesModules = modules.filter((m) =>
+    ['OR01', 'TP01'].includes(m.code)
   );
-  const otherModules = modules.filter((m) => !usedCodes.has(m.code));
-
-  const sections = [];
-  if (salesModules.length) {
-    sections.push({ key: 'SALES', label: 'SALES', items: salesModules });
-  }
-  if (leadershipModules.length) {
-    sections.push({
-      key: 'LEADERSHIP',
-      label: 'LEADERSHIP',
-      items: leadershipModules,
-    });
-  }
-  if (otherModules.length) {
-    sections.push({
-      key: 'OTHER',
-      label: 'OSTATNÉ MODULY',
-      items: otherModules,
-    });
-  }
+  const leadershipModules = modules.filter((m) =>
+    ['IR01', 'CO01'].includes(m.code)
+  );
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.25 }}
-      className="mt-8"
+      transition={{ duration: 0.35, delay: 0.15 }}
+      className="space-y-6"
     >
-      <h3 className="text-lg md:text-xl font-semibold text-slate-50 mb-4">
+      <h3 className="text-lg font-bold text-slate-900">
         Dostupné moduly
       </h3>
 
-      <div className="space-y-7">
-        {sections.map((section, sectionIndex) => (
-          <section key={section.key} className="space-y-3">
-            <div className="text-[11px] tracking-[0.22em] uppercase text-slate-100/75">
-              {section.label}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {section.items.map((module, idx) => (
-                <ModuleCard
-                  key={module.code}
-                  module={module}
-                  index={sectionIndex * 10 + idx}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+      {/* SALES */}
+      {salesModules.length > 0 && (
+        <section className="space-y-3">
+          <p className="text-[11px] font-semibold tracking-[0.16em] uppercase text-slate-500">
+            Sales
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {salesModules.map((module, index) => (
+              <ModuleCard
+                key={module.code}
+                module={module}
+                index={index}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* LEADERSHIP */}
+      {leadershipModules.length > 0 && (
+        <section className="space-y-3">
+          <p className="text-[11px] font-semibold tracking-[0.16em] uppercase text-slate-500">
+            Leadership
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {leadershipModules.map((module, index) => (
+              <ModuleCard
+                key={module.code}
+                module={module}
+                index={salesModules.length + index}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </motion.div>
   );
 };
