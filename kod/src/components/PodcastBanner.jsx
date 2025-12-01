@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import GlassPanel from '@/components/GlassPanel';
 import { Button } from '@/components/ui/button';
 
-// Tu si môžeš meniť konkrétne epizódy / feedy
+// URL pre prehrávače – môžeš ich kedykoľvek zmeniť
 const SPOTIFY_EMBED_URL =
   'https://creators.spotify.com/pod/profile/presahpodcast/embed/episodes/Bez-ud--ktor-ij-firemn-hodnoty--sa-kultra-ned-ovplyvni-ani-vytvori---Tatiana-Ondrejkov-Pelikan-sk-leadership-e3atod6';
 
@@ -11,9 +11,8 @@ const APPLE_EMBED_URL =
   'https://embed.podcasts.apple.com/us/podcast/presah/id1669721867?itscg=30200&itsct=podcast_box_player&ls=1&mttnsubad=1669721867&theme=auto';
 
 const PodcastBanner = () => {
-  const [activePlayer, setActivePlayer] = useState<'spotify' | 'apple'>(
-    'spotify'
-  );
+  // JEDNODUCHÝ JS useState – žiadny TypeScript
+  const [activePlayer, setActivePlayer] = useState('spotify'); // 'spotify' alebo 'apple'
 
   return (
     <motion.section
@@ -22,7 +21,7 @@ const PodcastBanner = () => {
       transition={{ duration: 0.5, delay: 0.35 }}
       className="mt-10"
     >
-      {/* JEDEN glass panel – žiadne ďalšie glass divy vo vnútri */}
+      {/* Jeden glass panel – žiadne ďalšie „okná“ vnútri */}
       <GlassPanel className="p-6 md:p-7 lg:p-8">
         <div className="flex flex-col gap-4">
           <div>
@@ -38,7 +37,7 @@ const PodcastBanner = () => {
             </p>
           </div>
 
-          {/* Prepínač prehrávača */}
+          {/* Prepínač medzi Spotify a Apple Podcasts */}
           <div className="flex flex-wrap items-center gap-2 mt-1">
             <Button
               type="button"
@@ -53,11 +52,12 @@ const PodcastBanner = () => {
             >
               Spotify
             </Button>
+
             <Button
               type="button"
               onClick={() => setActivePlayer('apple')}
               variant="outline"
-              className={
+              className{
                 activePlayer === 'apple'
                   ? 'h-8 rounded-full bg-white text-[#B81457] border-white'
                   : 'h-8 rounded-full bg-white/10 text-slate-50 border-white/30 hover:bg-white/20'
@@ -68,7 +68,7 @@ const PodcastBanner = () => {
             </Button>
           </div>
 
-          {/* Iframe – len jeden „okno“ v glass paneli */}
+          {/* Vložený prehrávač – len jedno „okno“ */}
           <div className="mt-4 rounded-2xl overflow-hidden bg-black/5">
             {activePlayer === 'spotify' ? (
               <iframe
