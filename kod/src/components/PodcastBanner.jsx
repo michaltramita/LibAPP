@@ -1,114 +1,63 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React from 'react';
+import GlassPanel from '@/components/GlassPanel';
 
 const PodcastBanner = () => {
-  // Spotify embed konkrétnej epizódy
-  const spotifyEmbedUrl =
-    'https://creators.spotify.com/pod/profile/presahpodcast/embed/episodes/Bez-ud--ktor-ij-firemn-hodnoty--sa-kultra-ned-ovplyvni-ani-vytvori---Tatiana-Ondrejkov-Pelikan-sk-leadership-e3atod6';
-
-  // Apple Podcasts embed – z tvojho kódu
-  const appleEmbedUrl =
-    'https://embed.podcasts.apple.com/us/podcast/presah/id1669721867?itscg=30200&itsct=podcast_box_player&ls=1&mttnsubad=1669721867&theme=auto';
-
-  // ktorá platforma je zvolená: 'spotify' alebo 'apple'
-  const [activeTab, setActiveTab] = useState('spotify');
+  const spotifyProfileUrl =
+    'https://creators.spotify.com/pod/profile/presahpodcast';
+  const appleUrl =
+    'https://podcasts.apple.com/sk/podcast/presah/id1669721867?l=sk';
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.4 }}
-      className="mt-8 w-full max-w-5xl mx-auto"
-    >
-      <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-6 space-y-6">
-        <header className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#B81547]">
-            Podcast PRESAH
-          </p>
-          <h2 className="text-xl font-bold text-slate-900">
-            Počúvaj priamo v aplikácii
-          </h2>
-          <p className="text-sm text-slate-600">
-            Vyber si platformu, ktorú používaš najradšej. Epizódu si vieš
-            pustiť priamo v tejto appke, bez preklikávania.
-          </p>
-        </header>
+    <GlassPanel className="w-full p-5 md:p-6 flex flex-col gap-4 items-start">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">
+          Podcast Presah
+        </p>
+        <h3 className="mt-1 text-lg font-semibold text-white">
+          Počúvaj priamo v aplikácii
+        </h3>
+        <p className="mt-1 text-sm text-white/80 max-w-xl">
+          Vyber si platformu, ktorú používaš najradšej. Epizódu si vieš
+          pustiť priamo v tejto appke, bez preklikávania.
+        </p>
+      </div>
 
-        {/* prepínač Spotify / Apple */}
-        <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-sm font-medium">
-          <button
-            type="button"
-            onClick={() => setActiveTab('spotify')}
-            className={`px-4 py-1.5 rounded-full transition-colors ${
-              activeTab === 'spotify'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            Spotify
-          </button>
+      <div className="flex flex-wrap gap-2">
+        <a
+          href={spotifyProfileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-xs font-medium text-white border border-white/25"
+        >
+          Spotify
+        </a>
+        <a
+          href={appleUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-medium text-white border border-white/20"
+        >
+          Apple Podcasts
+        </a>
+      </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('apple')}
-            className={`px-4 py-1.5 rounded-full transition-colors ${
-              activeTab === 'apple'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            Apple Podcasts
-          </button>
-        </div>
-
-        {/* samotné prehrávače */}
-        <div className="mt-4">
-          {activeTab === 'spotify' && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                Počúvaj na Spotify
-              </p>
-              <iframe
-                src={spotifyEmbedUrl}
-                width="100%"
-                height="152"            // vyššia výška – nebude zrezaný
-                frameBorder="0"
-                scrolling="no"
-                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                loading="lazy"
-                title="Prehrávač podcastu PRESAH – Spotify"
-              ></iframe>
-            </div>
-          )}
-
-          {activeTab === 'apple' && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                Počúvaj na Apple Podcasts
-              </p>
-              {/* zarovnanie doľava – len div s pevnou šírkou, žiadne centerovanie */}
-              <div className="w-full">
-                <iframe
-                  src={appleEmbedUrl}
-                  title="Prehrávač podcastu PRESAH – Apple Podcasts"
-                  id="embedPlayer"
-                  style={{
-                    border: 0,
-                    borderRadius: '12px',
-                    width: '100%',
-                    height: '450px',
-                    maxWidth: '660px',
-                  }}
-                  sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
-                  allow="autoplay *; encrypted-media *; clipboard-write"
-                  loading="lazy"
-                ></iframe>
-              </div>
-            </div>
-          )}
+      <div className="w-full">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70 mb-2">
+          Počúvaj na Spotify
+        </p>
+        <div className="w-full overflow-hidden rounded-2xl border border-white/15 bg-black/20">
+          <iframe
+            src="https://creators.spotify.com/pod/profile/presahpodcast/embed/episodes/Bez-ud--ktor-ij-firemn-hodnoty--sa-kultra-ned-ovplyvni-ani-vytvori---Tatiana-Ondrejkov-Pelikan-sk-leadership-e3atod6"
+            height="152"
+            width="100%"
+            frameBorder="0"
+            scrolling="no"
+            title="PRESAH podcast"
+            className="w-full h-[152px] md:h-[180px]"
+          />
         </div>
       </div>
-    </motion.section>
+    </GlassPanel>
   );
 };
 
