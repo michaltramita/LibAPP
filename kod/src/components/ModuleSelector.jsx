@@ -59,13 +59,48 @@ const ModuleSelector = ({ modules }) => {
     );
   }
 
-  // Rozdelenie modulov podľa kódu na SALES a LEADERSHIP
-  const salesModules = modules.filter((m) =>
-    ['OR01', 'TP01'].includes(m.code)
-  );
-  const leadershipModules = modules.filter((m) =>
-    ['IR01', 'CO01'].includes(m.code)
-  );
+  const normalize = (text) => (text || '').toLowerCase();
+
+  // Rozdelenie podľa názvu
+  const salesModules = modules.filter((m) => {
+    const t = normalize(m.title);
+    return (
+      t.includes('obchodný rozhovor') ||
+      t.includes('tvorba ponúk')
+    );
+  });
+
+  const leadershipModules = modules.filter((m) => {
+    const t = normalize(m.title);
+    return (
+      t.includes('individuálny rozhovor') ||
+      t.includes('koučing')
+    );
+  });
+
+  // Fallback – ak sa nič nezaradilo, zobraz všetko ako predtým
+  const groupedCount = salesModules.length + leadershipModules.length;
+  const useSimpleGrid = groupedCount === 0;
+
+  if (useSimpleGrid) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.15 }}
+        className="space-y-4"
+      >
+        <h3 className="text-lg font-bold text-slate-900">
+          Dostupné moduly
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {modules.map((module, index) => (
+            <ModuleCard key={module.code || module.title} module={module} index={index} />
+          ))}
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -87,7 +122,7 @@ const ModuleSelector = ({ modules }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {salesModules.map((module, index) => (
               <ModuleCard
-                key={module.code}
+                key={module.code || module.title}
                 module={module}
                 index={index}
               />
@@ -105,7 +140,7 @@ const ModuleSelector = ({ modules }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {leadershipModules.map((module, index) => (
               <ModuleCard
-                key={module.code}
+                key={module.code || module.title}
                 module={module}
                 index={salesModules.length + index}
               />
