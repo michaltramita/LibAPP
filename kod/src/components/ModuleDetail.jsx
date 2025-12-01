@@ -18,7 +18,7 @@ import StartSessionDialog from '@/components/StartSessionDialog';
 
 const StatCard = ({ icon, title, value, color }) => {
   return (
-    <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-4">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex items-start gap-4">
       <div className={`p-3 rounded-full ${color.bg}`}>
         {React.cloneElement(icon, { className: `w-6 h-6 ${color.text}` })}
       </div>
@@ -49,7 +49,7 @@ const ModuleDetail = () => {
             'module-overview',
             {
               body: { module_code: moduleCode },
-            }
+            },
           );
 
           if (error) throw new Error(error.message || 'An unknown error occurred.');
@@ -115,70 +115,82 @@ const ModuleDetail = () => {
   }
 
   if (!data) {
-    return null; // prípadne sem môže ísť error komponent
+    return null;
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20">
+    <div className="min-h-screen bg-slate-100">
+      {/* horný bar – podobný ako na dashboarde */}
+      <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-20">
         <Button variant="outline" size="sm" onClick={() => navigate('/dashboard')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Späť na nástenku
         </Button>
         <div className="text-right">
-          <h1 className="font-bold text-lg leading-tight text-slate-900">
+          <h1 className="font-bold text-sm sm:text-base text-slate-900">
             {data.module_info.title}
           </h1>
           <p className="text-xs text-slate-500">Prehľad modulu</p>
         </div>
       </header>
 
-      <main className="p-6 max-w-7xl mx-auto">
-        {/* hero blok – názov modulu + popis */}
-        <section className="bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-sm border border-slate-100 mb-8">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-3">
-              {data.module_info.title}
-            </h2>
-            <p className="text-slate-600 max-w-3xl mb-6">
-              {data.module_info.long_description}
-            </p>
-            <Button
-              onClick={() => setDialogOpen(true)}
-              className="bg-[#B81547] hover:bg-[#9e123d] text-white whitespace-nowrap"
-            >
-              <Play className="w-4 h-4 mr-2" />
-              Začať nový simulovaný rozhovor
-            </Button>
-          </div>
-        </section>
-
-        {data?.summary_stats?.total_sessions > 0 ? (
-          <>
-            <section className="mb-8">
-              <h3 className="text-xl font-bold text-slate-900 mb-4">
-                Vaše štatistiky v tomto module
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {stats.map((stat, index) => (
-                  <StatCard key={index} {...stat} />
-                ))}
+      {/* hlavný „panel“ ako na dashboarde */}
+      <main className="px-4 py-6 sm:px-6">
+        <div className="max-w-6xl mx-auto">
+          <section className="bg-white rounded-3xl shadow-lg border border-slate-100 p-6 sm:p-8 space-y-8">
+            {/* hlavička modulu */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="max-w-3xl">
+                <h2 className="text-2xl font-bold text-slate-900 mb-2">
+                  {data.module_info.title}
+                </h2>
+                <p className="text-slate-600">
+                  {data.module_info.long_description}
+                </p>
               </div>
-            </section>
+              <Button
+                onClick={() => setDialogOpen(true)}
+                className="bg-[#B81547] hover:bg-[#9e123d] text-white whitespace-nowrap"
+              >
+                <Play className="w-4 h-4 mr-2" />
+                Začať nový simulovaný rozhovor
+              </Button>
+            </div>
 
-            <RecentSessions sessions={data.recent_sessions} />
-          </>
-        ) : (
-          <div className="text-center py-16 px-6 bg-white/80 backdrop-blur-sm rounded-2xl border border-dashed border-slate-200 shadow-sm">
-            <BarChart className="mx-auto h-12 w-12 text-slate-400" />
-            <h3 className="mt-4 text-xl font-semibold text-slate-800">
-              Pre tento modul zatiaľ nemáte žiadne dáta
-            </h3>
-            <p className="mt-2 text-slate-500">
-              Absolvujte svoj prvý tréning a sledujte svoj pokrok.
-            </p>
-          </div>
-        )}
+            {/* obsah – štatistiky + posledné rozhovory / alebo empty state */}
+            {data?.summary_stats?.total_sessions > 0 ? (
+              <div className="space-y-8">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                    Vaše štatistiky v tomto module
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {stats.map((stat, index) => (
+                      <StatCard key={index} {...stat} />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">
+                    Posledné rozhovory
+                  </h3>
+                  <RecentSessions sessions={data.recent_sessions} />
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16 px-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50">
+                <BarChart className="mx-auto h-12 w-12 text-slate-400" />
+                <h3 className="mt-4 text-xl font-semibold text-slate-800">
+                  Pre tento modul zatiaľ nemáte žiadne dáta
+                </h3>
+                <p className="mt-2 text-slate-500">
+                  Absolvujte svoj prvý tréning a sledujte svoj pokrok.
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
       </main>
 
       <StartSessionDialog
