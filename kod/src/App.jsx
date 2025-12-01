@@ -25,7 +25,7 @@ import ProfilePage from '@/components/ProfilePage';
 import FeedbackPanel from '@/components/FeedbackPanel';
 import LiboChat from '@/components/LiboChat';
 
-// Wrapper component to extract sessionId from URL and pass it to the simulator
+// wrapper pre simuláciu
 const SimulationPage = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -64,7 +64,6 @@ const SimulationPage = () => {
 };
 
 function App() {
-  // Intro sa po prvom prehratí označí v localStorage ("introSeen" = "1")
   const [isIntroComplete, setIntroComplete] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('introSeen') === '1';
@@ -76,7 +75,6 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Routy, kde nechceme zobrazovať intro (login, register, zabudnuté heslo, reset hesla, callback)
   const authRoutes = [
     '/login',
     '/register',
@@ -90,7 +88,6 @@ function App() {
 
   const handleIntroComplete = () => {
     setIntroComplete(true);
-
     if (typeof window !== 'undefined') {
       localStorage.setItem('introSeen', '1');
     }
@@ -102,13 +99,19 @@ function App() {
     }
   };
 
-  // Intro zobrazujeme len ak ešte neprebehlo a zároveň nie sme na auth routach
   if (!isIntroComplete && !shouldSkipIntro) {
     return <IntroOverlay onComplete={handleIntroComplete} />;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-50">
+    <div
+      className="min-h-screen w-full text-slate-50"
+      style={{
+        // hlavná farba #B81457, trochu zosvetlený horný prechod, stmavený spodok
+        background:
+          'radial-gradient(circle at top, #ff6aa9 0, #B81457 40%, #5a0830 100%)',
+      }}
+    >
       <Helmet>
         <title>Libellius - Virtuálny zákazník</title>
         <meta
@@ -117,22 +120,22 @@ function App() {
         />
       </Helmet>
 
-      {/* Centrálne plátno aplikácie */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+      {/* centrálna „sklenená“ scéna */}
+      <div className="mx-auto max-w-7xl px-3 md:px-6 py-4 md:py-8">
         <Routes>
           {/* Auth stránky */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
-          {/* Reset hesla – podporujeme /update-password aj /auth/update-password */}
+          {/* reset hesla */}
           <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/auth/update-password" element={<UpdatePassword />} />
 
-          {/* Callback (napr. magic linky) */}
+          {/* callback */}
           <Route path="/auth/callback" element={<Callback />} />
 
-          {/* Chránené časti aplikácie */}
+          {/* chránené časti */}
           <Route
             path="/dashboard"
             element={
@@ -169,13 +172,13 @@ function App() {
             }
           />
 
-          {/* Default a fallback */}
+          {/* default + fallback */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </div>
 
-      {/* Libo je viditeľný len pre prihlásených používateľov, na všetkých stránkach */}
+      {/* Libo – viditeľný na všetkých chránených stránkach */}
       {session && <LiboChat />}
     </div>
   );
