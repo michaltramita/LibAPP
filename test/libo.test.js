@@ -15,10 +15,10 @@ test('executeTool calls navigate for navigate tool', () => {
   assert.strictEqual(called, '/dashboard');
 });
 
-test('RAG returns topics sorted', () => {
-  const results = searchContext('zmeniť heslo', 1);
+test('RAG returns LibApp docs sorted by keyword hits', () => {
+  const results = searchContext('obchodný rozhovor námietka ceny', 1);
   assert.ok(results.length > 0);
-  assert.strictEqual(results[0].id, 'change-password');
+  assert.strictEqual(results[0].id, 'obchodny-rozhovor');
 });
 
 test('LLM client returns fallback when disabled', async () => {
