@@ -23,6 +23,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const { toast } = useToast();
 
   const [experienceLevel, setExperienceLevel] = useState(null);
+  const [clientCategory, setClientCategory] = useState(null);
   const [clientType, setClientType] = useState(null);
   const [topic, setTopic] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +32,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
     if (open) {
       // Reset state when dialog opens
       setExperienceLevel(user?.user_metadata?.experience_level || null);
+      setClientCategory(null);
       setClientType(null);
       setTopic('');
       setIsLoading(false);
@@ -38,7 +40,12 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   }, [open, user]);
 
   const handleStartSession = async () => {
-    if (!experienceLevel || !clientType || !topic.trim()) {
+    if (
+      !experienceLevel ||
+      !clientCategory ||
+      !topic.trim() ||
+      (clientCategory === 'repeat' && !clientType)
+    ) {
       toast({
         title: "Chýbajúce informácie",
         description: "Prosím, vyplňte všetky parametre simulácie.",
@@ -78,7 +85,11 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
     }
   };
   
-  const isFormValid = experienceLevel && clientType && topic.trim();
+  const isFormValid =
+    experienceLevel &&
+    clientCategory &&
+    topic.trim() &&
+    (clientCategory === 'new' || (clientCategory === 'repeat' && clientType));
 
   const experienceLevels = [
     { value: 'beginner', label: 'Začiatočník', description: 'Jednoduché námietky, nápovedy' },
@@ -86,7 +97,12 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
     { value: 'expert', label: 'Expert', description: 'Náročný klient, tvrdé vyjednávanie' }
   ];
 
-  const clientTypes = [
+  const clientCategories = [
+    { value: 'new', label: 'Nový klient', description: 'Prvé stretnutie s novým zákazníkom' },
+    { value: 'repeat', label: 'Opakovaný predaj', description: 'Pokračovanie spolupráce s existujúcim klientom' }
+  ];
+
+  const discClientTypes = [
     { value: 'D', label: 'Dominantný', description: 'Rýchly, priamy, orientovaný na výsledky', color: 'bg-red-500' },
     { value: 'I', label: 'Interaktívny', description: 'Komunikatívny, emocionálny, priateľský', color: 'bg-yellow-500' },
     { value: 'S', label: 'Stabilný', description: 'Pokojný, lojálny, hľadá istotu', color: 'bg-green-500' },
@@ -111,7 +127,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
             <div className="space-y-4">
               <h3 className="flex items-center gap-3 text-lg font-semibold text-white">
                 <Target className="w-5 h-5 text-white opacity-80" />
-                Úroveň obchodníka
+                Náročnosť obchodného rozhovoru
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {experienceLevels.map((level) => (
@@ -134,34 +150,70 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
               </div>
             </div>
 
-            {/* Typ klienta (DISC) */}
+            {/* Typ klienta */}
             <div className="space-y-4">
               <h3 className="flex items-center gap-3 text-lg font-semibold text-white">
                 <Users className="w-5 h-5 text-white opacity-80" />
-                Typ klienta (DISC)
+                Typ klienta
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {clientTypes.map((type) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {clientCategories.map((category) => (
                   <motion.div
-                    key={type.value}
-                    onClick={() => setClientType(type.value)}
+                    key={category.value}
+                    onClick={() => {
+                      setClientCategory(category.value);
+                      setClientType(category.value === 'new' ? 'new_client' : null);
+                    }}
                     className={cn(
                       'p-4 sm:p-6 rounded-2xl border-2 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-start',
-                       clientType === type.value
+                      clientCategory === category.value
                         ? 'border-white bg-white text-slate-900 shadow-lg'
                         : 'border-white/50 bg-white/10 hover:bg-white/20 text-white'
                     )}
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    <div className={cn('w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white font-bold text-xl sm:text-2xl mb-3', type.color)}>
-                      {type.value}
-                    </div>
-                    <p className="font-bold text-lg">{type.label}</p>
-                    <p className="text-sm mt-1 flex-grow">{type.description}</p>
+                    <p className="font-bold text-lg">{category.label}</p>
+                    <p className="text-sm mt-1 flex-grow">{category.description}</p>
                   </motion.div>
                 ))}
               </div>
+
+              <AnimatePresence>
+                {clientCategory === 'repeat' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="pt-2"
+                  >
+                    <p className="text-sm text-white/80 mb-3">Vyberte typ klienta podľa metodiky DISC:</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {discClientTypes.map((type) => (
+                        <motion.div
+                          key={type.value}
+                          onClick={() => setClientType(type.value)}
+                          className={cn(
+                            'p-4 sm:p-6 rounded-2xl border-2 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-start',
+                             clientType === type.value
+                              ? 'border-white bg-white text-slate-900 shadow-lg'
+                              : 'border-white/50 bg-white/10 hover:bg-white/20 text-white'
+                          )}
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <div className={cn('w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white font-bold text-xl sm:text-2xl mb-3', type.color)}>
+                            {type.value}
+                          </div>
+                          <p className="font-bold text-lg">{type.label}</p>
+                          <p className="text-sm mt-1 flex-grow">{type.description}</p>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Odvetvie a téma stretnutia */}
