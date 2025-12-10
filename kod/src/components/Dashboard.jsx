@@ -4,7 +4,6 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { LogOut, BarChart2, User } from 'lucide-react';
-import DashboardStats from '@/components/DashboardStats';
 import RecentSessions from '@/components/RecentSessions';
 import DashboardSkeleton from '@/components/DashboardSkeleton';
 import ModuleSelector from '@/components/ModuleSelector';
@@ -142,11 +141,8 @@ const Dashboard = () => {
             <DashboardSkeleton />
           ) : data ? (
             <div className="space-y-8">
-              {data.summary_stats.total_sessions > 0 ? (
-                <>
-                  <DashboardStats stats={data.summary_stats} />
-                  <RecentSessions sessions={data.recent_sessions} />
-                </>
+              {data?.summary_stats?.total_sessions > 0 ? (
+                <RecentSessions sessions={data.recent_sessions} />
               ) : (
                 <div className="text-center py-10 px-4 rounded-2xl border border-dashed border-slate-300/80 bg-white/70">
                   <BarChart2 className="mx-auto h-10 w-10 text-slate-400" />
