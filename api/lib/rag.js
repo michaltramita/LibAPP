@@ -195,10 +195,54 @@ function searchFaq(query, k = 2) {
     .slice(0, k);
 }
 
+function loadLibAppDocsFlat() {
+  const docs = [];
+  if (!fs.existsSync(LIBAPP_DOCS_DIR)) return docs;
+
+  const stack = [LIBAPP_DOCS_DIR];
+  while (stack.length) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    entries.forEach((entry) => {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md') && entry.name.toLowerCase() !== 'readme.md') {
+        const raw = fs.readFileSync(fullPath, 'utf8');
+        const { frontmatter, body } = parseFrontmatter(raw);
+        const id = frontmatter.id || path.basename(entry.name, '.md');
+        const title = frontmatter.name || id;
+        docs.push({ id, title, content: body || '' });
+      }
+    });
+  }
+
+  return docs;
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function keywordScore(content, terms) {
+  const lower = content.toLowerCase();
+  return terms.reduce((score, term) => {
+    if (!term) return score;
+    const matches = lower.match(new RegExp(`${escapeRegExp(term)}`, 'gi'));
+    return score + (matches ? matches.length : 0);
+  }, 0);
+}
+
 function searchContext(query, k = 2) {
-  const faqResults = searchFaq(query, k);
-  const libAppResults = searchLibAppDocs(query, Math.max(3, k));
-  return [...faqResults, ...libAppResults].sort((a, b) => b.score - a.score);
+  const docs = loadLibAppDocsFlat();
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const scored = docs
+    .map((doc) => ({ ...doc, score: keywordScore(doc.content, terms) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k);
+
+  console.log('searchContext selected docs:', scored.map((d) => d.id));
+  return scored;
 }
 
 module.exports = { searchContext, loadFaq, searchLibAppDocs, buildLibAppIndex };
