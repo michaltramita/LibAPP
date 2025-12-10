@@ -32,7 +32,11 @@ function createLLMClient() {
       const choice = part.choices[0];
       if (choice.delta?.tool_calls?.length) for (const call of choice.delta.tool_calls) yield { type: 'tool_call', name: call.function?.name, arguments: safeParse(call.function?.arguments || '{}') };
       if (choice.delta?.content) yield { type: 'token', content: choice.delta.content };
-      if (choice.finish_reason === 'stop') yield { type: 'final' };
+      // Akákoľvek "finish_reason" je terminálny stav
+      if (choice.finish_reason) {
+        yield { type: 'final' };
+        break;
+      }
     }
   }
 
