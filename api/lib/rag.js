@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 const LIBAPP_DOCS_DIR = path.join(process.cwd(), 'docs', 'libapp');
+let libAppIndexCache = null;
+let libAppSignatureCache = null;
 
 function loadFaq() {
   const file = path.join(process.cwd(), 'docs', 'help', 'topics.json');
@@ -112,10 +114,18 @@ function readLibAppFiles(dir = LIBAPP_DOCS_DIR) {
     if (entry.isDirectory()) {
       files = files.concat(readLibAppFiles(fullPath));
     } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md') && entry.name.toLowerCase() !== 'readme.md') {
-      files.push(fullPath);
+      const stat = fs.statSync(fullPath);
+      files.push({ filePath: fullPath, mtimeMs: stat.mtimeMs });
     }
   });
   return files;
+}
+
+function buildSignature(files) {
+  return files
+    .map((f) => `${path.relative(process.cwd(), f.filePath)}:${f.mtimeMs}`)
+    .sort()
+    .join('|');
 }
 
 function parseLibAppFile(filePath) {
@@ -141,10 +151,18 @@ function parseLibAppFile(filePath) {
   });
 }
 
-function buildLibAppIndex() {
+function buildLibAppIndex(force = false) {
   const files = readLibAppFiles();
-  const chunks = files.flatMap(parseLibAppFile);
-  return { chunks };
+  const signature = buildSignature(files);
+
+  if (!force && libAppIndexCache && libAppSignatureCache === signature) {
+    return libAppIndexCache;
+  }
+
+  const chunks = files.flatMap(({ filePath }) => parseLibAppFile(filePath));
+  libAppIndexCache = { chunks };
+  libAppSignatureCache = signature;
+  return libAppIndexCache;
 }
 
 function searchLibAppDocs(query, k = 3) {
@@ -180,7 +198,7 @@ function searchFaq(query, k = 2) {
 function searchContext(query, k = 2) {
   const faqResults = searchFaq(query, k);
   const libAppResults = searchLibAppDocs(query, Math.max(3, k));
-  return [...faqResults, ...libAppResults];
+  return [...faqResults, ...libAppResults].sort((a, b) => b.score - a.score);
 }
 
 module.exports = { searchContext, loadFaq, searchLibAppDocs, buildLibAppIndex };
