@@ -1,6 +1,8 @@
 {
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "dev:api": "node api/dev-server.js",
+    "check:openai": "node api/check-openai.js"
   },
   "dependencies": {
     "openai": "^4.104.0"

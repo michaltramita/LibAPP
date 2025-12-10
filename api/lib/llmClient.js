@@ -17,6 +17,12 @@ const toolDefinitions = [
 ];
 
 function createLLMClient() {
+  console.log('[libo-llm-debug]', {
+    enabled: process.env.LIBO_AI_ENABLED !== 'false',
+    hasKey: !!process.env.OPENAI_API_KEY,
+    keyPrefix: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.slice(0, 5) : null,
+    rawKey: process.env.OPENAI_API_KEY || '(undefined)'
+  });
   const enabled = process.env.LIBO_AI_ENABLED !== 'false';
   const apiKey = process.env.OPENAI_API_KEY;
   const client = enabled && apiKey ? new (require('openai'))({ apiKey }) : null;
@@ -27,16 +33,21 @@ function createLLMClient() {
       return;
     }
 
-    const completion = await client.chat.completions.create({ model, temperature, messages, tools: toolDefinitions, stream: true });
-    for await (const part of completion) {
-      const choice = part.choices[0];
-      if (choice.delta?.tool_calls?.length) for (const call of choice.delta.tool_calls) yield { type: 'tool_call', name: call.function?.name, arguments: safeParse(call.function?.arguments || '{}') };
-      if (choice.delta?.content) yield { type: 'token', content: choice.delta.content };
-      // Akákoľvek "finish_reason" je terminálny stav
-      if (choice.finish_reason) {
-        yield { type: 'final' };
-        break;
+    try {
+      const completion = await client.chat.completions.create({ model, temperature, messages, tools: toolDefinitions, stream: true });
+      for await (const part of completion) {
+        const choice = part.choices[0];
+        if (choice.delta?.tool_calls?.length) for (const call of choice.delta.tool_calls) yield { type: 'tool_call', name: call.function?.name, arguments: safeParse(call.function?.arguments || '{}') };
+        if (choice.delta?.content) yield { type: 'token', content: choice.delta.content };
+        // Akákoľvek "finish_reason" je terminálny stav
+        if (choice.finish_reason) {
+          yield { type: 'final' };
+          break;
+        }
       }
+    } catch (err) {
+      console.error('[libo-ai] OpenAI chat error', err);
+      yield { type: 'final', content: 'AI je dočasne nedostupná. Skús to prosím neskôr.' };
     }
   }
 

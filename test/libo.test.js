@@ -32,14 +32,17 @@ test('LLM client returns fallback when disabled', async () => {
   assert.ok(value.content.includes('nedostupná'));
 });
 
-async function loadLLMClientWithMockOpenAI(mockIterableFactory) {
+async function loadLLMClientWithMockOpenAI(mockIterableFactory, options = {}) {
   // mock openai module
   delete require.cache[require.resolve('openai')];
   require.cache[require.resolve('openai')] = {
     exports: function MockOpenAI() {
       this.chat = {
         completions: {
-          create: async () => mockIterableFactory(),
+          create: async () => {
+            if (options.throwOnCreate) throw options.throwOnCreate;
+            return mockIterableFactory();
+          },
         },
       };
     },
@@ -68,6 +71,16 @@ test('LLM client emits final for any finish_reason', async () => {
     assert.strictEqual(finals.length, 1, `Expected one final for reason ${reason}`);
     assert.strictEqual(chunks[chunks.length - 1].type, 'final');
   }
+});
+
+test('LLM client returns fallback when OpenAI call fails', async () => {
+  const llm = await loadLLMClientWithMockOpenAI(async function* () {}, { throwOnCreate: new Error('network down') });
+
+  const iterator = llm.streamChat({ messages: [{ role: 'user', content: 'hi' }] });
+  const { value } = await iterator.next();
+
+  assert.strictEqual(value.type, 'final');
+  assert.ok(value.content.includes('nedostupná'));
 });
 
 test('chat handler closes SSE stream on final', async () => {
