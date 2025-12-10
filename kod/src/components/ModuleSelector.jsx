@@ -34,6 +34,66 @@ const visualsByCategory = {
   },
 };
 
+const moduleVisualPresets = [
+  {
+    match: (module, normalizedTitle) =>
+      module.code === 'OR01' || normalizedTitle.includes('obchodný rozhovor'),
+    visuals: {
+      badge: 'bg-amber-100 text-amber-800',
+      accent: 'text-amber-800',
+      halo: 'from-amber-50 via-white to-white',
+      blob: 'bg-amber-200/70',
+      image:
+        'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80',
+    },
+  },
+  {
+    match: (module, normalizedTitle) =>
+      normalizedTitle.includes('ponúk') || normalizedTitle.includes('ponuku'),
+    visuals: {
+      badge: 'bg-emerald-100 text-emerald-800',
+      accent: 'text-emerald-800',
+      halo: 'from-emerald-50 via-white to-white',
+      blob: 'bg-emerald-200/70',
+      image:
+        'https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?auto=format&fit=crop&w=1200&q=80',
+    },
+  },
+  {
+    match: (module, normalizedTitle) =>
+      normalizedTitle.includes('senior') || normalizedTitle.includes('leadership'),
+    visuals: {
+      badge: 'bg-indigo-100 text-indigo-800',
+      accent: 'text-indigo-800',
+      halo: 'from-indigo-50 via-white to-white',
+      blob: 'bg-indigo-200/70',
+      image:
+        'https://images.unsplash.com/photo-1485217988980-11786ced9454?auto=format&fit=crop&w=1200&q=80',
+    },
+  },
+];
+
+const fallbackImages = [
+  'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1483478550801-ceba5fe50e8e?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1200&q=80',
+];
+
+const getVisualsForModule = (module, category, index) => {
+  const normalizedTitle = (module?.title || '').toLowerCase();
+
+  const preset = moduleVisualPresets.find(({ match }) => match(module, normalizedTitle));
+  if (preset) {
+    return preset.visuals;
+  }
+
+  const baseVisuals = visualsByCategory[category] || visualsByCategory.default;
+  return {
+    ...baseVisuals,
+    image: fallbackImages[index % fallbackImages.length],
+  };
+};
+
 const getCategoryKey = (title = '') => {
   const normalized = title.toLowerCase();
 
@@ -51,7 +111,7 @@ const getCategoryKey = (title = '') => {
 const ModuleCard = ({ module, index, category }) => {
   const navigate = useNavigate();
 
-  const visuals = visualsByCategory[category] || visualsByCategory.default;
+  const visuals = getVisualsForModule(module, category, index);
   const description =
     module?.long_description || module?.description || module?.short_description;
 
