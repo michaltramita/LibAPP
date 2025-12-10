@@ -1,7 +1,7 @@
 {
   "version": 2,
+  "outputDirectory": "kod/dist",
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/kod/$1" }
+    { "src": "/api/(.*)", "dest": "/api/$1" }
   ]
 }
