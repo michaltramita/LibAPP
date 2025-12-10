@@ -1,0 +1,14 @@
+[
+  {
+    "id": "change-password",
+    "title": "Zmena hesla v nastaveniach",
+    "content": "Ak chceš zmeniť heslo, otvor Nastavenia > Bezpečnosť a zvoľ Zmeniť heslo. Potom potvrď novú kombináciu a ulož.",
+    "route": "/profile"
+  },
+  {
+    "id": "add-user",
+    "title": "Pridanie nového používateľa",
+    "content": "Nového používateľa pridáš cez Dashboard > Používatelia > Pridať. Vyplň meno, email a rolu, potvrdz formulár.",
+    "route": "/dashboard"
+  }
+]
