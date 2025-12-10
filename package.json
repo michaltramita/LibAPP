@@ -1,11 +1,13 @@
 {
   "scripts": {
+    "postinstall": "npm --prefix kod install",
     "build": "npm --prefix kod run build",
     "test": "node --test",
     "dev:api": "node api/dev-server.js",
     "check:openai": "node api/check-openai.js",
     "verify:build-script": "node tools/assert-build-script.cjs",
-    "verify:vercel": "node tools/assert-vercel-config.cjs"
+    "verify:vercel": "node tools/assert-vercel-config.cjs",
+    "verify:root-scripts": "node tools/assert-root-scripts.cjs"
   },
   "dependencies": {
     "openai": "^4.104.0"
