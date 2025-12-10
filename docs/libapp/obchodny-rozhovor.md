@@ -11,6 +11,14 @@ updated: 2024-07-01
 # Účel modulu
 Pomáha viesť štruktúrovaný obchodný rozhovor so zákazníkom. Libo má usmerniť poradcu, aby rýchlo zistil potreby, predstavil hodnotu a zvládol námietky bez tlaku.
 
+# Kde modul nájdeš v aplikácii
+Modul Obchodný rozhovor sa v LibApp nachádza tu:
+	1.	Po prihlásení klikni v ľavom bočnom menu na Simulácie.
+	2.	V ponuke modulov vyber Obchodný rozhovor.
+	3.	Otvorí sa úvodná obrazovka simulácie s možnosťou spustiť nový rozhovor alebo zobraziť výsledky.
+
+Ak používateľ hľadá modul, má ho viesť k týmto trom krokom.
+
 ## Kedy použiť
 - Pri prvom kontakte s potenciálnym klientom alebo partnerom.
 - Keď zákazník žiada informácie o produkte, cene alebo implementácii.
