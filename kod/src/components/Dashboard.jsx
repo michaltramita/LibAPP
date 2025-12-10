@@ -3,8 +3,7 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
-import { LogOut, BarChart2, User } from 'lucide-react';
-import RecentSessions from '@/components/RecentSessions';
+import { LogOut, User } from 'lucide-react';
 import DashboardSkeleton from '@/components/DashboardSkeleton';
 import ModuleSelector from '@/components/ModuleSelector';
 import PodcastBanner from '@/components/PodcastBanner';
@@ -141,21 +140,6 @@ const Dashboard = () => {
             <DashboardSkeleton />
           ) : data ? (
             <div className="space-y-8">
-              {data?.summary_stats?.total_sessions > 0 ? (
-                <RecentSessions sessions={data.recent_sessions} />
-              ) : (
-                <div className="text-center py-10 px-4 rounded-2xl border border-dashed border-slate-300/80 bg-white/70">
-                  <BarChart2 className="mx-auto h-10 w-10 text-slate-400" />
-                  <h3 className="mt-4 text-lg font-semibold text-slate-800">
-                    Zatiaľ žiadne dáta
-                  </h3>
-                  <p className="mt-2 text-sm text-slate-500">
-                    Absolvujte svoje prvé simulované stretnutie a sledujte svoj
-                    pokrok.
-                  </p>
-                </div>
-              )}
-
               {/* DOSTUPNÉ MODULY – SALES / LEADERSHIP */}
               <ModuleSelector modules={data.modules} />
 
