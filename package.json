@@ -2,7 +2,8 @@
   "scripts": {
     "test": "node --test",
     "dev:api": "node api/dev-server.js",
-    "check:openai": "node api/check-openai.js"
+    "check:openai": "node api/check-openai.js",
+    "build": "vite build"
   },
   "dependencies": {
     "openai": "^4.104.0"
