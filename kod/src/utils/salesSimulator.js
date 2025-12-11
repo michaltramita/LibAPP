@@ -43,7 +43,25 @@ const OBJECTIONS = {
   ],
 };
 
-const STATES = {
+const REPEAT_CLIENT_OBJECTIONS = {
+  beginner: [
+    { text: 'Minule sme sa bavili o implementácii a stále si nie som istý návratnosťou.', type: 'roi_history' },
+    { text: 'Konkurencia nám po poslednom stretnutí dala agresívnejšiu ponuku. Čím ju prekonáte?', type: 'competition_history' },
+    { text: 'Ešte stále vyhodnocujeme výsledky z predchádzajúcej fázy. Prečo to teraz zrýchľovať?', type: 'timeline' },
+  ],
+  intermediate: [
+    { text: 'Pri minulej spolupráci sme mali výzvy s adopciou tímu. Ako to tentoraz urobíte inak?', type: 'past_experience' },
+    { text: 'Naša interná analýza ukázala nižší ROI, než sme čakali. Viete to doložiť dátami?', type: 'roi' },
+    { text: 'Konkurent nám ukázal referencie z podobných projektov. Aké výsledky sme dosiahli spolu doteraz?', type: 'competition' },
+  ],
+  expert: [
+    { text: 'Chcem porovnať konkrétne výsledky z nášho minulého projektu s tým, čo teraz navrhujete.', type: 'results_comparison' },
+    { text: 'Pri implementácii sme narazili na úzke hrdlá. Ako zabezpečíte, že sa to nezopakuje?', type: 'implementation_history' },
+    { text: 'Aký posun sme dosiahli oproti konkurencii od nášho posledného rozhovoru?', type: 'competition_advanced' },
+  ],
+};
+
+export const STATES = {
   INTRO: 'intro',
   DISCOVERY: 'discovery',
   PRESENTATION: 'presentation',
@@ -59,19 +77,23 @@ const STATES = {
  * This is the main function called by the UI.
  */
 export const generateClientReply = (currentState, userMessage, sessionState) => {
-  const { metrics, difficulty, clientDiscType } = sessionState;
+  const normalizedSessionState = {
+    clientType: sessionState.clientType || 'new',
+    ...sessionState,
+  };
+  const { metrics, difficulty, clientDiscType } = normalizedSessionState;
 
   // 1. Analyze user's message and update metrics
-  const updatedMetrics = analyzeSalesMessage(userMessage, metrics, currentState, sessionState);
+  const updatedMetrics = analyzeSalesMessage(userMessage, metrics, currentState, normalizedSessionState);
 
   // 2. Determine the next state of the conversation
-  const nextState = getNextState(currentState, userMessage, updatedMetrics, sessionState);
+  const nextState = getNextState(currentState, userMessage, updatedMetrics, normalizedSessionState);
 
   // 3. Generate the client's response based on the new state
-  const clientReply = generateClientReplyForState(nextState, userMessage, sessionState, updatedMetrics);
-  
+  const clientReply = generateClientReplyForState(nextState, userMessage, normalizedSessionState, updatedMetrics);
+
   // 4. Style the response based on DISC profile
-  const styledReply = styleResponseByDISC(clientReply, clientDiscType);
+  const styledReply = styleResponseByDISC(clientReply, clientDiscType, normalizedSessionState.clientType);
 
   const shouldEnd = nextState === STATES.FINISHED || (currentState === STATES.CLOSING && Math.random() < 0.5);
 
@@ -88,14 +110,15 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
 /**
  * Adapts the client's response tone and phrasing to match their DISC profile.
  */
-function styleResponseByDISC(response, discType) {
+function styleResponseByDISC(response, discType, clientType = 'new') {
   const profile = DISC_PROFILES[discType];
   if (!profile) return response;
 
   let message = response.message;
-  
+
   // Occasionally add a typical phrase
-  if (Math.random() < 0.2) {
+  const addPhraseThreshold = clientType === 'repeat' ? 0.35 : 0.2;
+  if (Math.random() < addPhraseThreshold) {
     const phrase = profile.typicalPhrases[Math.floor(Math.random() * profile.typicalPhrases.length)];
     message = `${phrase} ${message}`;
   }
@@ -122,8 +145,9 @@ function styleResponseByDISC(response, discType) {
 /**
  * Selects a relevant objection based on difficulty.
  */
-function pickObjection(difficulty) {
-  const possibleObjections = OBJECTIONS[difficulty] || OBJECTIONS['beginner'];
+function pickObjection(difficulty, clientType = 'new') {
+  const objectionPool = clientType === 'repeat' ? REPEAT_CLIENT_OBJECTIONS : OBJECTIONS;
+  const possibleObjections = objectionPool[difficulty] || objectionPool['beginner'];
   return possibleObjections[Math.floor(Math.random() * possibleObjections.length)];
 }
 
@@ -239,48 +263,77 @@ function getNextState(currentState, userMessage, metrics, sessionState) {
 /**
  * Generates a client response based on the current conversation state.
  */
-function generateClientReplyForState(state, userMessage, sessionState) {
-    const { difficulty } = sessionState;
+export function generateClientReplyForState(state, userMessage, sessionState) {
+    const { difficulty, clientType = 'new', industry } = sessionState;
     let message = '';
     let mood = 'neutral';
     let reason = 'Čaká na ďalšie informácie.';
 
+    const isNewClient = clientType === 'new';
+
     switch (state) {
         case STATES.INTRO:
-            message = 'Dobrý deň. Som pripravený. Povedzte mi, čo máte pre mňa.';
-            reason = 'Začína stretnutie.';
+            if (isNewClient) {
+                message = 'Dobrý deň, teší ma, že sa spoznávame. Rád si vypočujem, čo prinášate.';
+                reason = 'Nový kontakt, neutrálne predstavenie.';
+            } else {
+                message = `Som rád, že nadväzujeme na naše minulé rozhovory o ${industry || 'vašej firme'}. Poďme pokračovať.`;
+                reason = 'Pozná predchádzajúcu spoluprácu.';
+            }
             break;
         case STATES.DISCOVERY:
-            message = 'To je dobrá otázka. Našou hlavnou prioritou je momentálne zvýšenie efektivity a zníženie nákladov.';
-            mood = 'interested';
-            reason = 'Zaujal sa o zisťovanie potrieb.';
+            if (isNewClient) {
+                message = 'Aby som lepšie porozumel, aké sú vaše aktuálne priority a kde vnímate najväčší priestor na zlepšenie?';
+                mood = 'interested';
+                reason = 'Zvedavo zisťuje všeobecné potreby nového klienta.';
+            } else {
+                message = 'Minule ste spomínali problémy s efektivitou. Ako sa odvtedy posunuli výsledky a čo je teraz najväčšia priorita?';
+                mood = 'interested';
+                reason = 'Nadväzuje na minulé zistenia a kontext.';
+            }
             break;
         case STATES.PRESENTATION:
-            message = 'Rozumiem. A ako presne mi v tom vaše riešenie pomôže?';
-            mood = 'neutral';
-            reason = 'Očakáva prezentáciu hodnoty.';
+            if (isNewClient) {
+                message = 'Môžete mi priblížiť základné benefity a aké príklady z praxe máte? Chcem si to ujasniť.';
+                mood = 'neutral';
+                reason = 'Žiada objasnenie, bez predpokladu predchádzajúcej skúsenosti.';
+            } else {
+                message = 'Minule sme riešili rýchle nasadenie. Aké konkrétne kroky navrhujete teraz, aby sme nadviazali na predchádzajúce výsledky?';
+                mood = 'neutral';
+                reason = 'Očakáva detailné odporúčania prispôsobené histórii.';
+            }
             break;
         case STATES.OBJECTIONS:
-            const objection = pickObjection(difficulty);
+            const objection = pickObjection(difficulty, clientType);
             message = objection.text;
-            mood = 'skeptical';
-            reason = `Má námietku (${objection.type}).`;
+            mood = isNewClient ? 'skeptical' : 'curious';
+            reason = isNewClient ? 'Má základnú námietku typickú pre nového klienta.' : 'Overuje pokračovanie na základe predchádzajúcich skúseností.';
             break;
         case STATES.CLOSING:
-            if (sessionState.metrics.objectionsHandledWell > 0) {
-                message = 'Dobre, presvedčili ste ma, že to stojí za zváženie. Aké sú ďalšie kroky?';
-                mood = 'positive';
-                reason = 'Pripravený na ďalšie kroky.';
-            } else {
-                message = 'Stále nie som úplne presvedčený. Potrebujem si to ešte premyslieť.';
+            if (isNewClient) {
+                message = 'Potrebujem si to ešte premyslieť a uistiť sa, že to sedí na naše potreby. Aké materiály mi viete poslať?';
                 mood = 'skeptical';
-                reason = 'Má pochybnosti pred uzatvorením.';
+                reason = 'Nový klient potrebuje čas a uistenie pred rozhodnutím.';
+            } else if (sessionState.metrics.objectionsHandledWell > 0) {
+                message = 'Dáva mi to zmysel. Aké sú ďalšie kroky, aby sme nadviazali na našu doterajšiu spoluprácu?';
+                mood = 'positive';
+                reason = 'Pripravený pokračovať v už existujúcom vzťahu.';
+            } else {
+                message = 'Chcem vidieť, ako to zapadne do toho, čo sme robili naposledy. Viete mi ukázať plán pokračovania?';
+                mood = 'neutral';
+                reason = 'Zvažuje pokračovanie, potrebuje kontext s históriou.';
             }
             break;
         case STATES.FINISHED:
-            message = 'Ďakujem za stretnutie. Bolo to produktívne. Ozvem sa vám.';
-            mood = 'neutral';
-            reason = 'Ukončuje stretnutie.';
+            if (isNewClient) {
+                message = 'Ďakujem za predstavenie. Ozvem sa, keď si prejdeme informácie interne.';
+                mood = 'neutral';
+                reason = 'Ukončuje úvodné stretnutie bez histórie.';
+            } else {
+                message = 'Ďakujem, cením si nadviazanie na našu doterajšiu spoluprácu. Ozvem sa s ďalšími krokmi, aby sme pokračovali.';
+                mood = 'positive';
+                reason = 'Zhrnutie s ohľadom na spoločnú históriu.';
+            }
             break;
         default:
             message = 'Prepáčte, stratil som niť. Kde sme to skončili?';
@@ -298,7 +351,7 @@ const scaleScore = (value, max) => Math.max(1, Math.min(10, Math.floor((value / 
  * Builds the final, comprehensive feedback object.
  */
 export function buildFinalFeedback(sessionState) {
-    const { metrics, clientDiscType } = sessionState;
+    const { metrics, clientDiscType, clientType = 'new' } = sessionState;
 
     // Detailed dimension scores
     const dimScores = {
@@ -309,12 +362,18 @@ export function buildFinalFeedback(sessionState) {
         adaptation: scaleScore(metrics.adaptationToDISC, 3),
     };
 
+    if (clientType === 'repeat') {
+      dimScores.history = scaleScore(metrics.valueStatements + metrics.objectionsHandledWell, 4);
+      dimScores.relationshipAdaptation = scaleScore(metrics.adaptationToDISC + metrics.openQuestions, 4);
+    }
+
     // Ensure all dimScores are integers
     for (const key in dimScores) {
         dimScores[key] = Math.floor(dimScores[key]);
     }
 
-    const overallScore = Math.floor((dimScores.discovery + dimScores.presentation + dimScores.objections + dimScores.closing + dimScores.adaptation) / 5);
+    const scoreValues = Object.values(dimScores);
+    const overallScore = Math.floor(scoreValues.reduce((acc, value) => acc + value, 0) / scoreValues.length);
 
     const dimensions = [
       {
@@ -344,11 +403,26 @@ export function buildFinalFeedback(sessionState) {
       }
     ];
 
+    if (clientType === 'repeat') {
+      dimensions.push(
+        {
+          name: 'Práca s históriou',
+          score: dimScores.history,
+          comment: metrics.valueStatements > 1 ? 'Využili ste predchádzajúce výsledky v argumentácii.' : 'Ešte viac zdôraznite, čo sa už podarilo v našej spolupráci.'
+        },
+        {
+          name: 'Adaptácia na existujúceho klienta',
+          score: dimScores.relationshipAdaptation,
+          comment: metrics.adaptationToDISC > 1 ? 'Personalizácia bola citeľná a nadviazala na minulé interakcie.' : 'Viac prispôsobte komunikáciu poznaným preferenciám klienta.'
+        }
+      );
+    }
+
     let personalizedMessage = '';
     if (overallScore >= 8) personalizedMessage = "Vynikajúci výkon! Vaše predajné zručnosti sú na vysokej úrovni.";
     else if (overallScore >= 6) personalizedMessage = "Skvelá práca! Ukázali ste silné základy, zamerajte sa na oblasti s nižším skóre a budete neporaziteľný.";
     else personalizedMessage = "Dobrý začiatok! Každá simulácia je krokom k majstrovstvu. Zamerajte sa na odporúčané kroky.";
-    
+
     let nextSteps = '';
     const lowestScoreDim = [...dimensions].sort((a,b) => a.score - b.score)[0];
     if (lowestScoreDim.score < 7) {
@@ -379,6 +453,7 @@ export const evaluateMeeting = (messages, config) => {
         difficulty: config.salesmanLevel,
         clientDiscType: config.clientType,
         industry: config.industry,
+        clientType: config.clientCategory || 'new',
         metrics: tempMetrics,
     };
 

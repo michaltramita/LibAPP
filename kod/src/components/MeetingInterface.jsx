@@ -68,6 +68,7 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     currentState: 'intro',
     metrics: getInitialMetrics(),
     clientDiscType: config.clientDiscType,
+    clientType: config.clientType || 'new',
     difficulty: config.difficulty,
     industry: config.industry,
     clientMood: 'neutral',
