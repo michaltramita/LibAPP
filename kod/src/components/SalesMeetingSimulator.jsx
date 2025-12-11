@@ -122,6 +122,7 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
     topic: sessionData.topic,
     industry: sessionData.industry,
     clientDiscType: sessionData.client_disc_type, // Correctly mapped from DB
+    clientType: sessionData.client_category || 'new',
     difficulty: sessionData.difficulty,
     salesmanLevel: user?.user_metadata?.experience_level || 'beginner'
   };
