@@ -34,6 +34,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET') {
+    if (req.url === '/') {
+      res.status(200).json({ status: 'ok', service: 'libapp-api', time: new Date().toISOString() });
+    } else if (req.url === '/health') {
+      res.status(200).json({ ok: true });
+    } else {
+      res.status(404).json({ error: 'Not found' });
+    }
+
+    return;
+  }
+
   if (req.method === 'POST') {
     let raw = '';
     req.on('data', (chunk) => {
