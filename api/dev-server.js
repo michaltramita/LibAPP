@@ -2,6 +2,7 @@ const http = require('http');
 const chatHandler = require('./chat');
 const toolCallbackHandler = require('./chat/tool-callback');
 const { createLLMClient } = require('./lib/llmClient');
+const { supabaseAdmin } = require('./lib/supabaseAdmin');
 
 const port = process.env.PORT || 4000;
 
@@ -38,7 +39,40 @@ const server = http.createServer(async (req, res) => {
     if (req.url === '/') {
       res.status(200).json({ status: 'ok', service: 'libapp-api', time: new Date().toISOString() });
     } else if (req.url === '/health') {
-      res.status(200).json({ ok: true });
+      res.status(200).json({ status: 'ok' });
+    } else if (req.url === '/api/test-supabase') {
+      try {
+        const { data: sessionData, error: sessionError } = await supabaseAdmin
+          .from('sales_voice_sessions')
+          .insert([{
+            user_id: null,
+            module: 'obchodny_rozhovor',
+            difficulty: 'beginner',
+            client_type: 'new',
+            client_disc_type: null,
+          }])
+          .select('id')
+          .single();
+
+        if (sessionError) throw sessionError;
+
+        const sessionId = sessionData.id;
+
+        const { error: messageError } = await supabaseAdmin
+          .from('sales_voice_messages')
+          .insert([{
+            session_id: sessionId,
+            role: 'salesman',
+            content: 'TEST message',
+          }]);
+
+        if (messageError) throw messageError;
+
+        res.status(200).json({ ok: true, session_id: sessionId });
+      } catch (err) {
+        console.error('[libo-dev] supabase test error', err);
+        res.status(500).json({ error: 'supabase_error', details: err.message || 'Unknown error' });
+      }
     } else {
       res.status(404).json({ error: 'Not found' });
     }
