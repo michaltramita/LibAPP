@@ -12,6 +12,7 @@
     "verify:root-scripts": "node tools/assert-root-scripts.cjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.88.0",
     "openai": "^4.104.0"
   }
 }
