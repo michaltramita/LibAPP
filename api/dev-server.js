@@ -182,7 +182,40 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
-          const clientReplyText = 'Rozumiem. Povedzte mi o tom viac.';
+          const { error: salesmanCountError, count: salesmanCount } = await supabaseAdmin
+            .from('sales_voice_messages')
+            .select('id', { count: 'exact', head: true })
+            .eq('session_id', sessionIdValue)
+            .eq('role', 'salesman');
+
+          if (salesmanCountError) {
+            console.error('[sales-api] failed to count salesman messages', salesmanCountError);
+            res.status(500).json({
+              ok: false,
+              error: 'salesman_count_failed',
+              details: salesmanCountError.message || 'Unable to read salesman messages count',
+            });
+            return;
+          }
+
+          let clientReplyText = 'Rozumiem. Povedzte mi o tom viac.';
+          let stage = 'intro';
+
+          if (salesmanCount === 1) {
+            clientReplyText = 'Dobrý deň. Povedzte mi stručne, čo ponúkate a komu.';
+            stage = 'intro';
+          } else if (salesmanCount <= 3) {
+            clientReplyText = 'Rozumiem. Aké sú pre vás najdôležitejšie potreby alebo ciele, ktoré chcete týmto riešiť?';
+            stage = 'discovery';
+          } else if (salesmanCount <= 5) {
+            clientReplyText = 'OK. V čom je vaša ponuka iná než bežné riešenia a aký to má dopad na výsledky?';
+            stage = 'presentation';
+          } else if (salesmanCount >= 6) {
+            clientReplyText = 'Dobre. Aký je ďalší konkrétny krok, ktorý navrhujete?';
+            stage = 'closing';
+          }
+
+          console.log(`[sales] reply stage=${stage} salesmanCount=${salesmanCount}`);
 
           const { error: clientMessageError } = await supabaseAdmin
             .from('sales_voice_messages')
