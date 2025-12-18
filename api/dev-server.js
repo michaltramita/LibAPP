@@ -126,16 +126,35 @@ const server = http.createServer(async (req, res) => {
           const body = req.body || {};
           const { session_id, role, content } = body;
 
-          if (typeof session_id !== 'string' || typeof role !== 'string' || typeof content !== 'string' || content.trim() === '') {
-            res.status(400).json({ ok: false, error: 'validation_failed' });
+          const missingFields = [];
+          const sessionIdValue = typeof session_id === 'string' ? session_id.trim() : '';
+          const roleValue = typeof role === 'string' ? role.trim() : '';
+          const contentValue = typeof content === 'string' ? content.trim() : '';
+
+          if (!sessionIdValue) missingFields.push('session_id');
+          if (!roleValue) missingFields.push('role');
+          if (!contentValue) missingFields.push('content');
+
+          if (missingFields.length) {
+            const details = `Missing or invalid fields: ${missingFields.join(', ')}`;
+            console.warn(`[sales] message validation failed: ${details}`);
+            res.status(400).json({ ok: false, error: 'missing_fields', details });
+            return;
+          }
+
+          const allowedRoles = ['salesman', 'client', 'system'];
+          if (!allowedRoles.includes(roleValue)) {
+            const details = `Invalid role: ${roleValue}`;
+            console.warn(`[sales] message validation failed: ${details}`);
+            res.status(400).json({ ok: false, error: 'invalid_role', details });
             return;
           }
 
           const { data: messageData, error: messageError } = await supabaseAdmin
             .from('sales_voice_messages')
             .insert([{
-              session_id,
-              role,
+              session_id: sessionIdValue,
+              role: roleValue,
               content,
             }])
             .select('id')
