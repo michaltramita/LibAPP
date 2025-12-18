@@ -150,6 +150,24 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
+          const { data: existingSessions, error: sessionQueryError } = await supabaseAdmin
+            .from('sales_voice_sessions')
+            .select('id')
+            .eq('id', sessionIdValue)
+            .limit(1);
+
+          if (sessionQueryError) {
+            console.error('[sales-api] failed to verify session', sessionQueryError);
+            res.status(500).json({ ok: false, error: 'supabase_query_failed' });
+            return;
+          }
+
+          if (!existingSessions || !existingSessions.length) {
+            console.warn(`[sales] message rejected: session_not_found ${sessionIdValue}`);
+            res.status(404).json({ ok: false, error: 'session_not_found' });
+            return;
+          }
+
           const { data: messageData, error: messageError } = await supabaseAdmin
             .from('sales_voice_messages')
             .insert([{
