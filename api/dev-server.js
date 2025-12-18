@@ -168,15 +168,13 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
-          const { data: messageData, error: messageError } = await supabaseAdmin
+          const { error: messageError } = await supabaseAdmin
             .from('sales_voice_messages')
             .insert([{
               session_id: sessionIdValue,
               role: roleValue,
               content,
-            }])
-            .select('id')
-            .single();
+            }]);
 
           if (messageError) {
             console.error('[sales-api] failed to insert message', messageError);
@@ -184,7 +182,23 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
-          res.status(200).json({ ok: true, message_id: messageData.id });
+          const clientReplyText = 'Rozumiem. Povedzte mi o tom viac.';
+
+          const { error: clientMessageError } = await supabaseAdmin
+            .from('sales_voice_messages')
+            .insert([{
+              session_id: sessionIdValue,
+              role: 'client',
+              content: clientReplyText,
+            }]);
+
+          if (clientMessageError) {
+            console.error('[sales-api] failed to insert client reply', clientMessageError);
+            res.status(500).json({ ok: false, error: 'client_reply_insert_failed' });
+            return;
+          }
+
+          res.status(200).json({ ok: true, client_message: clientReplyText });
         } else {
           res.status(404).json({ error: 'Not found' });
         }
