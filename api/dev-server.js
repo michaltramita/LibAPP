@@ -90,7 +90,7 @@ const server = http.createServer(async (req, res) => {
       try {
         req.body = raw ? JSON.parse(raw) : {};
       } catch (err) {
-        res.status(400).json({ error: 'Invalid JSON body' });
+        res.status(400).json({ ok: false, error: 'invalid_json' });
         return;
       }
 
@@ -99,6 +99,29 @@ const server = http.createServer(async (req, res) => {
           await chatHandler(req, res);
         } else if (req.url === '/api/chat/tool-callback') {
           await toolCallbackHandler(req, res);
+        } else if (req.url === '/api/sales/session/start') {
+          const body = req.body || {};
+          const sessionInput = {
+            user_id: body.user_id ?? null,
+            module: body.module || 'obchodny_rozhovor',
+            difficulty: body.difficulty || 'beginner',
+            client_type: body.client_type || 'new',
+            client_disc_type: body.client_disc_type ?? null,
+          };
+
+          const { data: sessionData, error: sessionError } = await supabaseAdmin
+            .from('sales_voice_sessions')
+            .insert([sessionInput])
+            .select('id')
+            .single();
+
+          if (sessionError) {
+            console.error('[sales-api] failed to insert session', sessionError);
+            res.status(500).json({ ok: false, error: 'supabase_insert_failed' });
+            return;
+          }
+
+          res.status(200).json({ ok: true, session_id: sessionData.id });
         } else {
           res.status(404).json({ error: 'Not found' });
         }
