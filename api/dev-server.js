@@ -29,6 +29,7 @@ const server = http.createServer(async (req, res) => {
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
@@ -36,11 +37,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET') {
-    if (req.url === '/') {
+    const url = new URL(req.url, 'http://localhost');
+    const { pathname } = url;
+
+    const isUUID = (value) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
+
+    if (pathname === '/') {
       res.status(200).json({ status: 'ok', service: 'libapp-api', time: new Date().toISOString() });
-    } else if (req.url === '/health') {
+    } else if (pathname === '/health') {
       res.status(200).json({ status: 'ok' });
-    } else if (req.url === '/api/test-supabase') {
+    } else if (pathname === '/api/test-supabase') {
       try {
         const { data: sessionData, error: sessionError } = await supabaseAdmin
           .from('sales_voice_sessions')
@@ -72,6 +78,58 @@ const server = http.createServer(async (req, res) => {
       } catch (err) {
         console.error('[libo-dev] supabase test error', err);
         res.status(500).json({ error: 'supabase_error', details: err.message || 'Unknown error' });
+      }
+    } else if (pathname.startsWith('/api/sales/session/')) {
+      const messageRouteMatch = pathname.match(/^\/api\/sales\/session\/([0-9a-fA-F-]{36})\/messages$/);
+      const sessionRouteMatch = pathname.match(/^\/api\/sales\/session\/([0-9a-fA-F-]{36})$/);
+      const sessionId = (messageRouteMatch && messageRouteMatch[1]) || (sessionRouteMatch && sessionRouteMatch[1]);
+
+      if (!sessionId || !isUUID(sessionId)) {
+        res.status(400).json({ ok: false, error: 'invalid_session_id' });
+        return;
+      }
+
+      if (sessionRouteMatch) {
+        const { data: session, error: sessionError } = await supabaseAdmin
+          .from('sales_voice_sessions')
+          .select('*')
+          .eq('id', sessionId)
+          .single();
+
+        if (sessionError || !session) {
+          res.status(404).json({ ok: false, error: 'session_not_found' });
+          return;
+        }
+
+        const { data: messages, error: messagesError } = await supabaseAdmin
+          .from('sales_voice_messages')
+          .select('*')
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: true });
+
+        if (messagesError) {
+          console.error('[sales-api] failed to fetch session messages', messagesError);
+          res.status(500).json({ ok: false, error: 'supabase_query_failed' });
+          return;
+        }
+
+        res.status(200).json({ ok: true, session, messages: messages || [] });
+      } else if (messageRouteMatch) {
+        const { data: messages, error: messagesError } = await supabaseAdmin
+          .from('sales_voice_messages')
+          .select('*')
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: true });
+
+        if (messagesError) {
+          console.error('[sales-api] failed to fetch messages', messagesError);
+          res.status(500).json({ ok: false, error: 'supabase_query_failed' });
+          return;
+        }
+
+        res.status(200).json({ ok: true, messages: messages || [] });
+      } else {
+        res.status(404).json({ error: 'Not found' });
       }
     } else {
       res.status(404).json({ error: 'Not found' });
