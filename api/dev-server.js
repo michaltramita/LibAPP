@@ -122,6 +122,32 @@ const server = http.createServer(async (req, res) => {
           }
 
           res.status(200).json({ ok: true, session_id: sessionData.id });
+        } else if (req.url === '/api/sales/message') {
+          const body = req.body || {};
+          const { session_id, role, content } = body;
+
+          if (typeof session_id !== 'string' || typeof role !== 'string' || typeof content !== 'string' || content.trim() === '') {
+            res.status(400).json({ ok: false, error: 'validation_failed' });
+            return;
+          }
+
+          const { data: messageData, error: messageError } = await supabaseAdmin
+            .from('sales_voice_messages')
+            .insert([{
+              session_id,
+              role,
+              content,
+            }])
+            .select('id')
+            .single();
+
+          if (messageError) {
+            console.error('[sales-api] failed to insert message', messageError);
+            res.status(500).json({ ok: false, error: 'supabase_insert_failed' });
+            return;
+          }
+
+          res.status(200).json({ ok: true, message_id: messageData.id });
         } else {
           res.status(404).json({ error: 'Not found' });
         }
