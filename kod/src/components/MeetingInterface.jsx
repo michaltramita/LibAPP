@@ -5,7 +5,7 @@ import {
   Send, Mic, MicOff, User, Bot, PlayCircle, Search, Lightbulb, ThumbsDown, Award, Flag, CheckCircle, Volume2, BarChart2
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { generateClientReply, getInitialMetrics, getStartingMoodLevel } from '@/utils/salesSimulator';
+import { generateClientReply, getInitialMetrics, getInitialIntroFlags, getStartingMoodLevel } from '@/utils/salesSimulator';
 import { cn } from '@/lib/utils';
 
 
