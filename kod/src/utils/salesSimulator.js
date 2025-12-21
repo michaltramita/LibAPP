@@ -666,6 +666,7 @@ export function generateClientReplyForState(state, userMessage, sessionState, me
     switch (state) {
         case STATES.INTRO:
             let introBase = '';
+            const missingClientType = !sessionState.clientType;
             if (isNewClient) {
                 introBase = 'Dobrý deň, teší ma, že sa spoznávame. Rád si vypočujem, čo prinášate.';
                 reason = 'Nový kontakt, neutrálne predstavenie.';
