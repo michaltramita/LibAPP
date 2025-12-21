@@ -5,7 +5,7 @@ import {
   Send, Mic, MicOff, User, Bot, PlayCircle, Search, Lightbulb, ThumbsDown, Award, Flag, CheckCircle, Volume2, BarChart2
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { generateClientReply, getInitialMetrics } from '@/utils/salesSimulator';
+import { generateClientReply, getInitialMetrics, getInitialIntroFlags } from '@/utils/salesSimulator';
 import { cn } from '@/lib/utils';
 
 
@@ -69,6 +69,7 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     metrics: getInitialMetrics(),
     clientDiscType: config.clientDiscType,
     clientType: config.clientType || 'new',
+    introFlags: getInitialIntroFlags(),
     difficulty: config.difficulty,
     industry: config.industry,
     clientMood: 'neutral',
@@ -165,13 +166,13 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     setIsTyping(true);
 
     setTimeout(() => {
-      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, shouldEnd } = generateClientReply(
+      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, introFlags, shouldEnd } = generateClientReply(
         sessionState.currentState,
         salesmanMessage.text,
         sessionState
       );
       
-      const newSessionState = { ...sessionState, currentState: newState, metrics: updatedMetrics, clientMood, clientMoodReason };
+      const newSessionState = { ...sessionState, currentState: newState, metrics: updatedMetrics, introFlags, clientMood, clientMoodReason };
       setSessionState(newSessionState);
 
       const clientMessageObj = { type: 'client', text: clientMessage, timestamp: new Date() };

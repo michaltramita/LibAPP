@@ -79,21 +79,35 @@ export const STATES = {
 export const generateClientReply = (currentState, userMessage, sessionState) => {
   const normalizedSessionState = {
     clientType: sessionState.clientType || 'new',
+    introFlags: sessionState.introFlags || getInitialIntroFlags(),
     ...sessionState,
   };
   const { metrics, difficulty, clientDiscType } = normalizedSessionState;
 
   // 1. Analyze user's message and update metrics
-  const updatedMetrics = analyzeSalesMessage(userMessage, metrics, currentState, normalizedSessionState);
+  const { metrics: updatedMetrics, introFlags: updatedIntroFlags } = analyzeSalesMessage(
+    userMessage,
+    metrics,
+    currentState,
+    normalizedSessionState
+  );
+  const sessionWithIntro = { ...normalizedSessionState, introFlags: updatedIntroFlags };
 
   // 2. Determine the next state of the conversation
-  const nextState = getNextState(currentState, userMessage, updatedMetrics, normalizedSessionState);
+  const nextState = getNextState(currentState, userMessage, updatedMetrics, sessionWithIntro);
+  const introGatePassed = currentState === STATES.INTRO && nextState === STATES.DISCOVERY;
 
   // 3. Generate the client's response based on the new state
-  const clientReply = generateClientReplyForState(nextState, userMessage, normalizedSessionState, updatedMetrics);
+  const clientReply = generateClientReplyForState(
+    nextState,
+    userMessage,
+    sessionWithIntro,
+    updatedMetrics,
+    { introGatePassed }
+  );
 
   // 4. Style the response based on DISC profile
-  const styledReply = styleResponseByDISC(clientReply, clientDiscType, normalizedSessionState.clientType);
+  const styledReply = styleResponseByDISC(clientReply, clientDiscType, sessionWithIntro.clientType);
 
   const shouldEnd = nextState === STATES.FINISHED || (currentState === STATES.CLOSING && Math.random() < 0.5);
 
@@ -103,6 +117,7 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
     clientMood: styledReply.mood,
     clientMoodReason: styledReply.reason,
     updatedMetrics: updatedMetrics,
+    introFlags: updatedIntroFlags,
     shouldEnd: shouldEnd,
   };
 };
@@ -165,70 +180,166 @@ const initialMetrics = {
 
 export const getInitialMetrics = () => JSON.parse(JSON.stringify(initialMetrics));
 
+
+export const getInitialIntroFlags = () => ({
+  hasGoal: false,
+  hasAgenda: false,
+  hasOpenQuestion: false,
+  hasConsentSignal: false,
+  startedPitchTooEarly: false,
+  longMonologue: false,
+});
+
+export function detectSignalsIntro(text, sessionState) {
+  const lowerMessage = (text || '').toLowerCase();
+  const questionsAsked = (lowerMessage.match(/\?/g) || []).length;
+
+  const openQuestionRegex = /(\bako\b|\bprečo\b|\bčo\b|\bkde\b|\bkedy\b|\bakým\b[^?]*|\baky\b|\baké\b|\baka\b)[^?]*\?/gi;
+  let openQuestions = (text.match(openQuestionRegex) || []).length;
+  const openQuestionPhrases = ['povedzte mi', 'ako dnes'];
+  if (openQuestionPhrases.some((phrase) => lowerMessage.includes(phrase))) {
+    openQuestions = Math.max(openQuestions, 1);
+  }
+
+  const hasGoal = ['cieľ', 'dôvod', 'dnes by som chcel', 'chceme dosiahnuť'].some((word) => lowerMessage.includes(word));
+  const hasAgenda = ['najprv', 'potom', 'na záver', 'agenda', 'postup'].some((word) => lowerMessage.includes(word));
+  const hasConsentQuestion = ['môžeme takto', 'je to ok', 'je to okej', 'sedí vám', 'je to v poriadku'].some((phrase) => lowerMessage.includes(phrase));
+
+  const productWords = ['produkt', 'funkci', 'modul', 'ponuku', 'cena', 'licenc', 'demo', 'riešenie'];
+  const startedPitchTooEarly = productWords.some((word) => lowerMessage.includes(word)) && openQuestions === 0;
+
+  const sentenceCount = (text.split(/[.!?]/).filter((part) => part.trim().length > 0)).length;
+  const longMonologue = sentenceCount >= 6 && questionsAsked === 0;
+
+  return {
+    questionsAsked,
+    openQuestions,
+    hasGoal,
+    hasAgenda,
+    hasOpenQuestion: openQuestions > 0,
+    hasConsentQuestion,
+    startedPitchTooEarly,
+    longMonologue,
+  };
+}
+
+export function isIntroGateSatisfied(sessionState) {
+  const { introFlags = getInitialIntroFlags(), metrics = getInitialMetrics() } = sessionState;
+
+  const requiredSignals =
+    introFlags.hasGoal &&
+    introFlags.hasAgenda &&
+    introFlags.hasOpenQuestion &&
+    introFlags.hasConsentSignal;
+
+  const metricsReady = metrics.questionsAsked >= 1 && metrics.openQuestions >= 1;
+  const blocked = introFlags.startedPitchTooEarly === true || introFlags.longMonologue === true;
+
+  return requiredSignals && metricsReady && !blocked;
+}
+
 /**
  * Analyzes the user's message to update performance metrics.
  */
 function analyzeSalesMessage(message, currentMetrics, state, sessionState) {
+    const introFlags = { ...(sessionState.introFlags || getInitialIntroFlags()) };
     if (!message) {
-      return currentMetrics;
+      return { metrics: currentMetrics, introFlags };
     }
 
     const newMetrics = { ...currentMetrics };
     const lowerMessage = message.toLowerCase();
 
-    // Questions
-    const questionCount = (lowerMessage.match(/\?/g) || []).length;
-    if (questionCount > 0) {
-        newMetrics.questionsAsked += questionCount;
-        const openWords = ['ako', 'prečo', 'čo', 'ktoré', 'akým spôsobom', 'povedzte mi'];
-        if (openWords.some(word => lowerMessage.startsWith(word))) {
-            newMetrics.openQuestions += 1;
+    if (state === STATES.INTRO) {
+        const signals = detectSignalsIntro(message, sessionState);
+        newMetrics.questionsAsked += signals.questionsAsked;
+        newMetrics.openQuestions += signals.openQuestions;
+
+        introFlags.hasGoal = introFlags.hasGoal || signals.hasGoal;
+        introFlags.hasAgenda = introFlags.hasAgenda || signals.hasAgenda;
+        introFlags.hasOpenQuestion = introFlags.hasOpenQuestion || signals.hasOpenQuestion;
+        introFlags.startedPitchTooEarly = introFlags.startedPitchTooEarly || signals.startedPitchTooEarly;
+        introFlags.longMonologue = introFlags.longMonologue || signals.longMonologue;
+        if (signals.hasConsentQuestion) {
+            introFlags.hasConsentSignal = true;
+        }
+
+        // Adaptation simple heuristic for intro
+        if (sessionState.clientType === 'repeat') {
+            const discSignals = {
+                D: ['roi', 'výsledok', 'výsledky', 'termín'],
+                C: ['dáta', 'parametre', 'analýza', 'presnosť'],
+                S: ['podpora', 'bezpečnosť', 'bezpečné', 'stabilita'],
+                I: ['ľudia', 'spolupráca', 'tím', 'partnerstvo'],
+            };
+            const profile = sessionState.clientDiscType ?? null;
+            if (profile && discSignals[profile]) {
+                if (discSignals[profile].some((word) => lowerMessage.includes(word))) {
+                    newMetrics.adaptationToDISC += 1;
+                }
+            } else if (Object.values(discSignals).some((words) => words.some((word) => lowerMessage.includes(word)))) {
+                newMetrics.adaptationToDISC += 1;
+            }
+        } else {
+            if (signals.hasAgenda && !signals.startedPitchTooEarly) {
+                newMetrics.adaptationToDISC += 1;
+            }
+        }
+    } else {
+        // Questions
+        const questionCount = (lowerMessage.match(/\?/g) || []).length;
+        if (questionCount > 0) {
+            newMetrics.questionsAsked += questionCount;
+            const openWords = ['ako', 'prečo', 'čo', 'ktoré', 'akým spôsobom', 'povedzte mi'];
+            if (openWords.some(word => lowerMessage.startsWith(word))) {
+                newMetrics.openQuestions += 1;
+            }
+        }
+
+        // Needs Identified (heuristic)
+        if (state === STATES.DISCOVERY && questionCount > 0 && newMetrics.needsIdentified < 4) {
+            newMetrics.needsIdentified += 1;
+        }
+
+        // Value Statements
+        const valueWords = ['benefit', 'výhoda', 'zlepšiť', 'ušetriť', 'efektívnejšie', 'rast'];
+        if (valueWords.some(word => lowerMessage.includes(word))) {
+            newMetrics.valueStatements += 1;
+        }
+        
+        // Objections
+        if (state === STATES.OBJECTIONS) {
+            newMetrics.objectionHandlingAttempts += 1;
+            // Simple heuristic for good handling
+            if (lowerMessage.includes('rozumiem vašej obave') || lowerMessage.includes('je to legitímna otázka')) {
+                newMetrics.objectionsHandledWell += 1;
+                newMetrics.adaptationToDISC +=1; // Empathy is good adaptation
+            }
+        }
+
+        // Closing
+        const closingWords = ['ďalšie kroky', 'môžeme začať', 'poslať zmluvu', 'dohodnime sa'];
+        if (closingWords.some(word => lowerMessage.includes(word))) {
+            newMetrics.closingAttempts += 1;
+        }
+
+        // DISC Adaptation
+        const profile = DISC_PROFILES[sessionState.clientDiscType];
+        if (profile && profile.focus === 'results' && (lowerMessage.includes('výsledky') || lowerMessage.includes('roi'))) {
+            newMetrics.adaptationToDISC += 1;
+        }
+        if (profile && profile.focus === 'relationships' && (lowerMessage.includes('spolupráca') || lowerMessage.includes('partnerstvo'))) {
+            newMetrics.adaptationToDISC += 1;
+        }
+        if (profile && profile.focus === 'security' && (lowerMessage.includes('bezpečnosť') || lowerMessage.includes('podpora'))) {
+            newMetrics.adaptationToDISC += 1;
+        }
+        if (profile && profile.focus === 'accuracy' && (lowerMessage.includes('dáta') || lowerMessage.includes('analýza'))) {
+            newMetrics.adaptationToDISC += 1;
         }
     }
 
-    // Needs Identified (heuristic)
-    if (state === STATES.DISCOVERY && questionCount > 0 && newMetrics.needsIdentified < 4) {
-        newMetrics.needsIdentified += 1;
-    }
-
-    // Value Statements
-    const valueWords = ['benefit', 'výhoda', 'zlepšiť', 'ušetriť', 'efektívnejšie', 'rast'];
-    if (valueWords.some(word => lowerMessage.includes(word))) {
-        newMetrics.valueStatements += 1;
-    }
-    
-    // Objections
-    if (state === STATES.OBJECTIONS) {
-        newMetrics.objectionHandlingAttempts += 1;
-        // Simple heuristic for good handling
-        if (lowerMessage.includes('rozumiem vašej obave') || lowerMessage.includes('je to legitímna otázka')) {
-            newMetrics.objectionsHandledWell += 1;
-            newMetrics.adaptationToDISC +=1; // Empathy is good adaptation
-        }
-    }
-
-    // Closing
-    const closingWords = ['ďalšie kroky', 'môžeme začať', 'poslať zmluvu', 'dohodnime sa'];
-    if (closingWords.some(word => lowerMessage.includes(word))) {
-        newMetrics.closingAttempts += 1;
-    }
-
-    // DISC Adaptation
-    const profile = DISC_PROFILES[sessionState.clientDiscType];
-    if (profile && profile.focus === 'results' && (lowerMessage.includes('výsledky') || lowerMessage.includes('roi'))) {
-        newMetrics.adaptationToDISC += 1;
-    }
-    if (profile && profile.focus === 'relationships' && (lowerMessage.includes('spolupráca') || lowerMessage.includes('partnerstvo'))) {
-        newMetrics.adaptationToDISC += 1;
-    }
-    if (profile && profile.focus === 'security' && (lowerMessage.includes('bezpečnosť') || lowerMessage.includes('podpora'))) {
-        newMetrics.adaptationToDISC += 1;
-    }
-    if (profile && profile.focus === 'accuracy' && (lowerMessage.includes('dáta') || lowerMessage.includes('analýza'))) {
-        newMetrics.adaptationToDISC += 1;
-    }
-
-    return newMetrics;
+    return { metrics: newMetrics, introFlags };
 }
 
 // --- STATE MACHINE ---
@@ -241,7 +352,7 @@ function getNextState(currentState, userMessage, metrics, sessionState) {
 
     switch (currentState) {
         case STATES.INTRO:
-            return metrics.questionsAsked > 0 ? STATES.DISCOVERY : STATES.INTRO;
+            return isIntroGateSatisfied({ ...sessionState, metrics }) ? STATES.DISCOVERY : STATES.INTRO;
         case STATES.DISCOVERY:
             return metrics.valueStatements > 0 || metrics.needsIdentified > 2 ? STATES.PRESENTATION : STATES.DISCOVERY;
         case STATES.PRESENTATION:
@@ -263,8 +374,10 @@ function getNextState(currentState, userMessage, metrics, sessionState) {
 /**
  * Generates a client response based on the current conversation state.
  */
-export function generateClientReplyForState(state, userMessage, sessionState) {
+export function generateClientReplyForState(state, userMessage, sessionState, metrics = getInitialMetrics(), options = {}) {
     const { difficulty, clientType = 'new', industry } = sessionState;
+    const { introGatePassed = false } = options;
+    const introFlags = sessionState.introFlags || getInitialIntroFlags();
     let message = '';
     let mood = 'neutral';
     let reason = 'Čaká na ďalšie informácie.';
@@ -273,7 +386,19 @@ export function generateClientReplyForState(state, userMessage, sessionState) {
 
     switch (state) {
         case STATES.INTRO:
-            if (isNewClient) {
+            if (!introFlags.hasGoal || !introFlags.hasAgenda) {
+                message = 'Aby som vám lepšie rozumel, aký je dnešný cieľ a čo by sme mali prejsť?';
+                reason = 'Potrebujem jasný cieľ a postup.';
+            } else if (introFlags.startedPitchTooEarly || introFlags.longMonologue) {
+                message = 'Skúsme začať otázkami o vašej situácii, aby som mohol reagovať presnejšie.';
+                reason = 'Potrebujem najprv viac otázok a kontextu.';
+            } else if (introFlags.hasGoal && introFlags.hasAgenda && introFlags.hasConsentSignal) {
+                message = 'Áno, je to v poriadku, poďme podľa vášho postupu.';
+                reason = 'Potvrdzuje súhlas s navrhnutým postupom.';
+            } else if (introFlags.hasOpenQuestion) {
+                message = 'Krátko: sme v raste a zaujíma ma, ako to viete podporiť, máme teraz nový tím.';
+                reason = 'Odpovedá stručne na otvorenú otázku s jedným detailom.';
+            } else if (isNewClient) {
                 message = 'Dobrý deň, teší ma, že sa spoznávame. Rád si vypočujem, čo prinášate.';
                 reason = 'Nový kontakt, neutrálne predstavenie.';
             } else {
@@ -282,7 +407,11 @@ export function generateClientReplyForState(state, userMessage, sessionState) {
             }
             break;
         case STATES.DISCOVERY:
-            if (isNewClient) {
+            if (introGatePassed) {
+                message = 'Super. Tak poďme na vašu situáciu a priority, čo je teraz najdôležitejšie?';
+                mood = 'interested';
+                reason = 'Intro splnené, prechádza do zisťovania potrieb.';
+            } else if (isNewClient) {
                 message = 'Aby som lepšie porozumel, aké sú vaše aktuálne priority a kde vnímate najväčší priestor na zlepšenie?';
                 mood = 'interested';
                 reason = 'Zvedavo zisťuje všeobecné potreby nového klienta.';
@@ -445,6 +574,7 @@ export function buildFinalFeedback(sessionState) {
 
 export const evaluateMeeting = (messages, config) => {
     let tempMetrics = getInitialMetrics();
+    let introFlags = getInitialIntroFlags();
     let currentState = STATES.INTRO;
 
     const salesmanMessages = messages.filter(m => m.type === 'salesman').map(m => m.text);
@@ -458,10 +588,13 @@ export const evaluateMeeting = (messages, config) => {
     };
 
     for(const msg of salesmanMessages) {
-        tempMetrics = analyzeSalesMessage(msg, tempMetrics, currentState, sessionState);
-        currentState = getNextState(currentState, msg, tempMetrics, sessionState);
+        const analysis = analyzeSalesMessage(msg, tempMetrics, currentState, { ...sessionState, introFlags });
+        tempMetrics = analysis.metrics;
+        introFlags = analysis.introFlags;
+        currentState = getNextState(currentState, msg, tempMetrics, { ...sessionState, introFlags });
     }
     sessionState.metrics = tempMetrics;
+    sessionState.introFlags = introFlags;
     
     return buildFinalFeedback(sessionState);
 };
