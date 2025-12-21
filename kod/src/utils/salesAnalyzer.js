@@ -8,6 +8,14 @@ const PRESSURE_PHRASES = ['musíme rozhodnúť dnes', 'potrebujem potvrdiť hne�
 const PRODUCT_PHRASES = ['produkt', 'funkci', 'modul', 'ponuku', 'cena', 'licenc', 'demo', 'riešenie', 'feature', 'ponuka'];
 const VALUE_PHRASES = ['zlepšiť', 'ušetriť', 'benefit', 'výhoda', 'výsledok', 'hodnota'];
 
+const NEED_PHRASES = ['trápi', 'brzdí', 'problém', 'potrebujete', 'cieľ', 'nefunguje', 'chýba', 'naráža'];
+const IMPACT_PHRASES = ['dopad', 'čo to spôsobuje', 'koľko času', 'koľko stojí', 'riziko', 'chyby', 'dopad na tím', 'dopad na ľudí'];
+const SUMMARY_PHRASES = ['ak to správne chápem', 'zhrniem', 'čiže', 'rozumiem tomu tak'];
+const CONFIRM_PHRASES = ['sedí to?', 'je to tak?', 'chápem správne?', 'súhlasí?'];
+const FOLLOW_UP_PHRASES = ['spomenuli ste', 'hovorili ste', 'vraveli ste', 'keď ste povedali', 'k tomu'];
+const EARLY_PITCH_PHRASES = ['ponúkame', 'naše riešenie', 'produkt', 'balík', 'implementácia', 'cenník', 'demo'];
+const OPEN_STARTERS = ['ako', 'čo', 'prečo', 'kedy', 'kde', 'kto', 'aký', 'koľko', 'ktor'];
+
 const DISC_SIGNALS = {
   D: ['roi', 'výsledok', 'výsledky', 'termín', 'tempo'],
   C: ['dáta', 'parametre', 'analýza', 'presnosť', 'compliance'],
@@ -96,11 +104,29 @@ export function analyzeSalesmanTurn({ text = '', phase = 'intro', settings = {},
   const discProfile = settings.disc || settings.clientDiscType || state.clientDiscType;
 
   if (phase !== 'intro') {
+    if (phase === 'needs' || phase === 'discovery') {
+      const { needsSignals, metricDelta } = detectNeedsSignals(normalizedText, settings, state);
+      return {
+        signals: needsSignals,
+        metricDelta,
+        introFlagsDelta: {},
+        moodDelta: { delta: 0, reasons: [] },
+        phaseSignals: { needs: needsSignals },
+        notes: [
+          `needs/questions=${needsSignals.questionCount || 0}`,
+          `needs/openQuestions=${needsSignals.openQuestionCount || 0}`,
+          `needs/identified=${needsSignals.needsCount || 0}`,
+          `needs/impact=${needsSignals.impact || false}`,
+        ],
+      };
+    }
+
     return {
       signals: {},
       metricDelta: {},
       introFlagsDelta: {},
       moodDelta: { delta: 0, reasons: [] },
+      phaseSignals: {},
       notes: ['No analyzer implemented for this phase'],
     };
   }
@@ -146,7 +172,61 @@ export function analyzeSalesmanTurn({ text = '', phase = 'intro', settings = {},
     `intro/pressure=${signals.hasPressure}`,
   ];
 
-  return { signals, metricDelta, introFlagsDelta, moodDelta, notes };
+  return { signals, metricDelta, introFlagsDelta, moodDelta, phaseSignals: {}, notes };
+}
+
+function detectNeedsSignals(text = '', settings = {}, state = {}) {
+  const normalizedText = text || '';
+  const lower = normalizedText.toLowerCase();
+  const questionsAsked = (normalizedText.match(/\?/g) || []).length;
+  const questionParts = normalizedText.split('?').map((part) => part.trim()).filter(Boolean);
+
+  let openQuestions = 0;
+  questionParts.forEach((part) => {
+    const lowerPart = part.toLowerCase();
+    const startsWithOpen = OPEN_STARTERS.some((starter) => lowerPart.startsWith(starter));
+    const containsOpenCue =
+      /\bčo presne\b|\bako dnes\b|\baký dopad\b|\bpodľa čoho\b|\bkto bude\b/i.test(lowerPart);
+    const matchesOpenPattern = new RegExp(OPEN_QUESTION_REGEX.source, 'gi').test(`${part}?`);
+    if (startsWithOpen || containsOpenCue || matchesOpenPattern) {
+      openQuestions += 1;
+    }
+  });
+
+  const needMatches = NEED_PHRASES.filter((phrase) => lower.includes(phrase)).length;
+  const impactDetected = IMPACT_PHRASES.some((phrase) => lower.includes(phrase));
+  const summaryDetected = SUMMARY_PHRASES.some((phrase) => lower.includes(phrase));
+  const confirmDetected = CONFIRM_PHRASES.some((phrase) => lower.includes(phrase));
+  const followUpDetected = FOLLOW_UP_PHRASES.some((phrase) => lower.includes(phrase));
+  const earlyPitch = EARLY_PITCH_PHRASES.some((phrase) => lower.includes(phrase));
+
+  const adaptationDelta = followUpDetected || summaryDetected || confirmDetected ? 1 : 0;
+
+  const needsSignals = {
+    questions: questionsAsked > 0,
+    questionCount: questionsAsked,
+    openQuestionCount: openQuestions,
+    openQuestions: openQuestions > 0,
+    needs: needMatches > 0,
+    needsCount: needMatches,
+    impact: impactDetected,
+    summary: summaryDetected,
+    confirm: confirmDetected,
+    followUp: followUpDetected,
+    earlyPitch,
+    discAdaptation: adaptationDelta > 0,
+  };
+
+  const metricDelta = {
+    askedQuestions: questionsAsked,
+    questionsAsked,
+    openQuestions: openQuestions,
+    identifiedNeeds: needMatches,
+    discAdaptation: adaptationDelta,
+    adaptationToDISC: adaptationDelta,
+  };
+
+  return { needsSignals, metricDelta };
 }
 
 export function deriveMoodFromScore(score) {

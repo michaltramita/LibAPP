@@ -75,6 +75,40 @@ test('analyzeSalesmanTurn produces unified deltas for intro agenda + consent + o
   assert.strictEqual(analysis.moodDelta.delta, 1);
 });
 
+test('needs analyzer counts questions and open questions', async () => {
+  const { analyzeSalesmanTurn } = await analyzerPromise;
+  const text = 'Aký je váš cieľ? Máte už riešenie? Ako dnes vyzerá proces? Kto je rozhodca? Funguje to?';
+  const analysis = analyzeSalesmanTurn({ text, phase: 'needs' });
+
+  assert.strictEqual(analysis.metricDelta.questionsAsked, 5);
+  assert.strictEqual(analysis.metricDelta.openQuestions, 3);
+});
+
+test('needs analyzer detects summary and confirmation cues', async () => {
+  const { analyzeSalesmanTurn } = await analyzerPromise;
+  const text = 'Ak to správne chápem, brzdí vás pomalý proces. Sedí to?';
+  const analysis = analyzeSalesmanTurn({ text, phase: 'needs' });
+
+  assert.strictEqual(analysis.phaseSignals.needs.summary, true);
+  assert.strictEqual(analysis.phaseSignals.needs.confirm, true);
+});
+
+test('needs analyzer surfaces impact signals', async () => {
+  const { analyzeSalesmanTurn } = await analyzerPromise;
+  const text = 'Aký dopad to má na tím a koľko času to stojí?';
+  const analysis = analyzeSalesmanTurn({ text, phase: 'needs' });
+
+  assert.strictEqual(analysis.phaseSignals.needs.impact, true);
+});
+
+test('needs analyzer identifies multiple needs statements', async () => {
+  const { analyzeSalesmanTurn } = await analyzerPromise;
+  const text = 'Čo vás trápi najviac? Ktoré časti procesu vás brzdia a čo ešte nefunguje alebo chýba?';
+  const analysis = analyzeSalesmanTurn({ text, phase: 'needs' });
+
+  assert.ok((analysis.metricDelta.identifiedNeeds || 0) >= 2);
+});
+
 test('unified analyzer catches early pitch monologue and blocks gate', async () => {
   const { analyzeSalesMessage, isIntroGateSatisfied, getInitialMetrics, getInitialIntroFlags, STATES } = await simulatorPromise;
   const pitchText = 'Máme skvelý produkt a modul, ktorý vám pomôže. Toto je moja dlhá veta jedna. Toto je druhá. Toto je tretia. Toto je štvrtá. Toto je piata. Toto je šiesta.';
