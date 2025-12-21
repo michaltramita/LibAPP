@@ -498,6 +498,16 @@ export function analyzeSalesMessage(message, currentMetrics, state, sessionState
         newMetrics.openQuestions += analysis.metricDelta.openQuestions || 0;
         newMetrics.needsIdentified += analysis.metricDelta.identifiedNeeds || 0;
         newMetrics.adaptationToDISC += analysis.metricDelta.adaptationToDISC || analysis.metricDelta.discAdaptation || 0;
+    } else if (state === STATES.PRESENTATION) {
+        const analysis = analyzeSalesmanTurn({
+          text: message,
+          phase: 'offer',
+          settings: sessionState,
+          state: sessionState,
+        });
+        newMetrics.questionsAsked += analysis.metricDelta.questionsAsked || 0;
+        newMetrics.openQuestions += analysis.metricDelta.openQuestions || 0;
+        newMetrics.valueStatements += analysis.metricDelta.valueStatements || 0;
     } else {
         // Questions
         const questionCount = (lowerMessage.match(/\?/g) || []).length;
