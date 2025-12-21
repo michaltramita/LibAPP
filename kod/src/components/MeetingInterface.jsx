@@ -74,6 +74,8 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     industry: config.industry,
     clientMood: 'neutral',
     clientMoodReason: 'Čaká na viac informácií',
+    moodScore: 0,
+    moodReasons: [],
   });
   
   const [messages, setMessages] = useState([]);
@@ -166,13 +168,13 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     setIsTyping(true);
 
     setTimeout(() => {
-      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, introFlags, shouldEnd } = generateClientReply(
+      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, introFlags, shouldEnd, moodScore, moodReasons } = generateClientReply(
         sessionState.currentState,
         salesmanMessage.text,
         sessionState
       );
       
-      const newSessionState = { ...sessionState, currentState: newState, metrics: updatedMetrics, introFlags, clientMood, clientMoodReason };
+      const newSessionState = { ...sessionState, currentState: newState, metrics: updatedMetrics, introFlags, clientMood, clientMoodReason, moodScore, moodReasons };
       setSessionState(newSessionState);
 
       const clientMessageObj = { type: 'client', text: clientMessage, timestamp: new Date() };
