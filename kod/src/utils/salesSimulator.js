@@ -95,18 +95,25 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
     clientType: sessionState.clientType || 'new',
     introFlags: sessionState.introFlags || getInitialIntroFlags(),
     moodScore: sessionState.moodScore || 0,
+    phaseCounters: sessionState.phaseCounters || getInitialPhaseCounters(),
     ...sessionState,
   };
   const { metrics, difficulty, clientDiscType } = normalizedSessionState;
 
   // 1. Analyze user's message and update metrics
-  const { metrics: updatedMetrics, introFlags: updatedIntroFlags } = analyzeSalesMessage(
+  const { metrics: updatedMetrics, introFlags: updatedIntroFlags, phaseCounters: updatedPhaseCounters, phaseGate, moodScore: updatedMoodScore, moodReasons: updatedMoodReasons } = analyzeSalesMessage(
     userMessage,
     metrics,
     currentState,
     normalizedSessionState
   );
-  const sessionWithIntro = { ...normalizedSessionState, introFlags: updatedIntroFlags };
+  const sessionWithIntro = {
+    ...normalizedSessionState,
+    introFlags: updatedIntroFlags,
+    phaseCounters: updatedPhaseCounters || normalizedSessionState.phaseCounters,
+    phaseGate,
+    moodScore: updatedMoodScore ?? normalizedSessionState.moodScore,
+  };
 
   // 1b. Update intro mood based on detected signals
   let introSignals = null;
@@ -130,8 +137,17 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
   const clientReply = generateClientReplyForState(nextState, userMessage, normalizedSessionState, updatedMetrics);
 
   // 4. Style the response based on DISC profile
-  const moodScore = sessionWithIntro.introFlags._moodScore ?? normalizedSessionState.moodScore ?? 0;
-  const moodReasons = sessionWithIntro.introFlags._moodReasons || [];
+  const moodScore =
+    sessionWithIntro.introFlags._moodScore ??
+    sessionWithIntro.phaseCounters?.needs?._moodScore ??
+    sessionWithIntro.moodScore ??
+    normalizedSessionState.moodScore ??
+    0;
+  const moodReasons =
+    sessionWithIntro.introFlags._moodReasons ||
+    sessionWithIntro.phaseCounters?.needs?._moodReasons ||
+    updatedMoodReasons ||
+    [];
   const derivedMood = currentState === STATES.INTRO ? deriveMoodFromScore(moodScore) : clientReply.mood;
   const styledReply = styleResponseByDISC(
     { ...clientReply, mood: derivedMood },
@@ -153,8 +169,10 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
     updatedMetrics: updatedMetrics,
     introFlags: updatedIntroFlags,
     shouldEnd: shouldEnd,
-    moodScore: sessionWithIntro.introFlags._moodScore || normalizedSessionState.moodScore || 0,
+    moodScore: moodScore,
     moodReasons,
+    phaseCounters: sessionWithIntro.phaseCounters,
+    phaseGate,
   };
 };
 
@@ -408,6 +426,20 @@ const initialMetrics = {
 
 export const getInitialMetrics = () => JSON.parse(JSON.stringify(initialMetrics));
 
+export const getInitialPhaseCounters = () => ({
+  needs: {
+    askedQuestions: 0,
+    openQuestions: 0,
+    identifiedNeeds: 0,
+    followUps: 0,
+    impactFound: false,
+    summaryFound: false,
+    confirmFound: false,
+    lastQuestion: '',
+    earlyPitch: false,
+  },
+});
+
 
 export const getInitialIntroFlags = () => ({
   hasGoal: false,
@@ -450,13 +482,25 @@ export function isIntroGateSatisfied(sessionState) {
   return requiredSignals && metricsReady && !blocked;
 }
 
+export function isNeedsGateSatisfied(phaseCounters = getInitialPhaseCounters()) {
+  const needs = phaseCounters.needs || getInitialPhaseCounters().needs;
+  const hasCounts =
+    (needs.askedQuestions || 0) >= 5 &&
+    (needs.openQuestions || 0) >= 3 &&
+    (needs.identifiedNeeds || 0) >= 2;
+  const hasSignals = needs.impactFound && needs.summaryFound && needs.confirmFound;
+  const blocked = needs.earlyPitch === true;
+  return hasCounts && hasSignals && !blocked;
+}
+
 /**
  * Analyzes the user's message to update performance metrics.
  */
 export function analyzeSalesMessage(message, currentMetrics, state, sessionState) {
     const introFlags = { ...(sessionState.introFlags || getInitialIntroFlags()) };
+    const phaseCounters = { ...(sessionState.phaseCounters || getInitialPhaseCounters()) };
     if (!message) {
-      return { metrics: currentMetrics, introFlags };
+      return { metrics: currentMetrics, introFlags, phaseCounters, moodScore: sessionState.moodScore || 0 };
     }
 
     const newMetrics = { ...currentMetrics };
@@ -486,18 +530,39 @@ export function analyzeSalesMessage(message, currentMetrics, state, sessionState
         const updatedMoodScore = updateMoodScore(sessionState.moodScore || 0, analysis.moodDelta.delta);
         introFlags._moodScore = updatedMoodScore;
         introFlags._moodReasons = analysis.moodDelta.reasons;
+        return { metrics: newMetrics, introFlags, phaseCounters, moodScore: updatedMoodScore, moodReasons: analysis.moodDelta.reasons };
     } else if (state === STATES.DISCOVERY) {
         const analysis = analyzeSalesmanTurn({
           text: message,
           phase: 'needs',
           settings: sessionState,
-          state: sessionState,
+          state: { ...sessionState, phaseCounters },
         });
 
-        newMetrics.questionsAsked += analysis.metricDelta.questionsAsked || analysis.metricDelta.askedQuestions || 0;
+        newMetrics.questionsAsked += analysis.metricDelta.questionsAsked || 0;
         newMetrics.openQuestions += analysis.metricDelta.openQuestions || 0;
-        newMetrics.needsIdentified += analysis.metricDelta.identifiedNeeds || 0;
-        newMetrics.adaptationToDISC += analysis.metricDelta.adaptationToDISC || analysis.metricDelta.discAdaptation || 0;
+        newMetrics.needsIdentified += analysis.metricDelta.needsIdentified || 0;
+        newMetrics.valueStatements += analysis.metricDelta.valueStatements || 0;
+
+        const updatedPhaseCounters = {
+          ...phaseCounters,
+          ...(analysis.phaseCounters || {}),
+        };
+
+        const updatedMoodScore = updateMoodScore(sessionState.moodScore || 0, analysis.moodDelta.delta);
+        if (updatedPhaseCounters.needs) {
+          updatedPhaseCounters.needs._moodScore = updatedMoodScore;
+          updatedPhaseCounters.needs._moodReasons = analysis.moodDelta.reasons;
+        }
+
+        return {
+          metrics: newMetrics,
+          introFlags,
+          phaseCounters: updatedPhaseCounters,
+          phaseGate: analysis.phaseGate,
+          moodScore: updatedMoodScore,
+          moodReasons: analysis.moodDelta.reasons,
+        };
     } else {
         // Questions
         const questionCount = (lowerMessage.match(/\?/g) || []).length;
@@ -552,7 +617,7 @@ export function analyzeSalesMessage(message, currentMetrics, state, sessionState
         }
     }
 
-    return { metrics: newMetrics, introFlags };
+    return { metrics: newMetrics, introFlags, phaseCounters, moodScore: sessionState.moodScore || 0 };
 }
 
 // --- STATE MACHINE ---
@@ -567,7 +632,8 @@ function getNextState(currentState, userMessage, metrics, sessionState) {
         case STATES.INTRO:
             return isIntroGateSatisfied({ ...sessionState, metrics }) ? STATES.DISCOVERY : STATES.INTRO;
         case STATES.DISCOVERY:
-            return metrics.valueStatements > 0 || metrics.needsIdentified > 2 ? STATES.PRESENTATION : STATES.DISCOVERY;
+            const needsGatePassed = sessionState.phaseGate?.needs?.passed ?? isNeedsGateSatisfied(sessionState.phaseCounters);
+            return needsGatePassed ? STATES.PRESENTATION : STATES.DISCOVERY;
         case STATES.PRESENTATION:
             if (Math.random() < 0.4 && metrics.objectionHandlingAttempts === 0) return STATES.OBJECTIONS;
             return metrics.closingAttempts > 0 ? STATES.CLOSING : STATES.PRESENTATION;
@@ -604,9 +670,9 @@ export function generateClientReplyForState(state, userMessage, sessionState, me
             if (isNewClient) {
                 introBase = 'Dobrý deň, teší ma, že sa spoznávame. Rád si vypočujem, čo prinášate.';
                 reason = 'Nový kontakt, neutrálne predstavenie.';
-                if (missingClientType) {
-                  introBase = `${introBase} Aký je váš cieľ a aký postup vám vyhovuje?`;
-                  reason = 'Potrebujem jasný cieľ a postup, aby sme pokračovali.';
+                if (sessionState.clientType === undefined) {
+                  introBase = `${introBase} Aký cieľ a postup rozhovoru navrhujete?`;
+                  reason = `${reason} Potrebujem jasný cieľ a postup.`;
                 }
             } else {
                 introBase = `Som rád, že nadväzujeme na naše minulé rozhovory o ${industry || 'vašej firme'}. Poďme pokračovať.`;

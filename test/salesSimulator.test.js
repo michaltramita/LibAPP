@@ -331,3 +331,87 @@ test('intro feedback surfaces strengths and improvements', async () => {
   assert.ok(feedback.recommendedLine.length > 5);
   assert.ok(feedback.discNote);
 });
+
+test('needs gate passes after required counts and signals', async () => {
+  const { analyzeSalesMessage, STATES, getInitialMetrics, getInitialPhaseCounters, isNeedsGateSatisfied } = await simulatorPromise;
+
+  let metrics = getInitialMetrics();
+  let phaseCounters = getInitialPhaseCounters();
+  let session = {
+    difficulty: 'intermediate',
+    clientDiscType: 'I',
+    phaseCounters,
+    moodScore: 0,
+  };
+
+  const messages = [
+    'Ako vyzerá váš tím? Čo teraz brzdí? Aby som pochopil situáciu, čo je priorita?',
+    'Aký dopad má problém na náklady? Ako ste spomenuli procesy, čo fungovalo? Potrebujete ľahšiu adopciu?',
+    'Zhrniem: potrebujete úsporu a rýchlosť, sedí to? Potvrdíte to, aby sme to vedeli uzavrieť?',
+  ];
+
+  for (const text of messages) {
+    const analysis = analyzeSalesMessage(text, metrics, STATES.DISCOVERY, { ...session, metrics, phaseCounters });
+    metrics = analysis.metrics;
+    phaseCounters = analysis.phaseCounters;
+    session = { ...session, metrics, phaseCounters, moodScore: analysis.moodScore };
+  }
+
+  const finalGate = analyzeSalesMessage('Má to dopad na tím aj výsledky, sedí?', metrics, STATES.DISCOVERY, {
+    ...session,
+    metrics,
+    phaseCounters,
+  });
+
+  assert.strictEqual(finalGate.phaseGate.needs.passed, true);
+  assert.strictEqual(isNeedsGateSatisfied(finalGate.phaseCounters), true);
+});
+
+test('early pitch blocks needs gate and lowers mood', async () => {
+  const { analyzeSalesMessage, STATES, getInitialMetrics, getInitialPhaseCounters } = await simulatorPromise;
+
+  const analysis = analyzeSalesMessage(
+    'Máme skvelú ponuku a cenu, chcete to objednať hneď?',
+    getInitialMetrics(),
+    STATES.DISCOVERY,
+    { difficulty: 'intermediate', clientDiscType: 'S', phaseCounters: getInitialPhaseCounters(), moodScore: 0 }
+  );
+
+  assert.strictEqual(analysis.phaseGate.needs.passed, false);
+  assert.ok((analysis.phaseGate.needs.reasons || []).includes('príliš skorý pitch'));
+  assert.ok(analysis.moodScore < 0);
+});
+
+test('expert difficulty penalizes early pitch in needs phase more than intermediate', async () => {
+  const { analyzeSalesMessage, STATES, getInitialMetrics, getInitialPhaseCounters } = await simulatorPromise;
+  const text = 'Hneď vám poviem cenu a pripravenú ponuku, ideme do toho?';
+
+  const intermediate = analyzeSalesMessage(text, getInitialMetrics(), STATES.DISCOVERY, {
+    difficulty: 'intermediate',
+    clientDiscType: 'D',
+    phaseCounters: getInitialPhaseCounters(),
+    moodScore: 0,
+  });
+  const expert = analyzeSalesMessage(text, getInitialMetrics(), STATES.DISCOVERY, {
+    difficulty: 'expert',
+    clientDiscType: 'D',
+    phaseCounters: getInitialPhaseCounters(),
+    moodScore: 0,
+  });
+
+  assert.ok(intermediate.moodScore > expert.moodScore);
+});
+
+test('summary plus confirm boosts needs mood and records reasons', async () => {
+  const { analyzeSalesMessage, STATES, getInitialMetrics, getInitialPhaseCounters } = await simulatorPromise;
+
+  const analysis = analyzeSalesMessage(
+    'Ak to zhrniem: riešime problémy s rastom a nákladmi, sedí to? Potvrdíte to, aby sme išli ďalej?',
+    getInitialMetrics(),
+    STATES.DISCOVERY,
+    { difficulty: 'intermediate', clientDiscType: 'C', phaseCounters: getInitialPhaseCounters(), moodScore: 0 }
+  );
+
+  assert.ok(analysis.moodScore > 0);
+  assert.ok((analysis.moodReasons || []).includes('summary_and_confirm'));
+});

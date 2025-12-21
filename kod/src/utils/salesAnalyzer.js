@@ -7,6 +7,11 @@ const EXPLANATION_PHRASES = ['aby som vedel', 'aby som vedela', 'aby som mohol',
 const PRESSURE_PHRASES = ['musíme rozhodnúť dnes', 'potrebujem potvrdiť hneď', 'do konca dňa', 'ihneď potvrdiť', 'okamžite rozhodnúť'];
 const PRODUCT_PHRASES = ['produkt', 'funkci', 'modul', 'ponuku', 'cena', 'licenc', 'demo', 'riešenie', 'feature', 'ponuka'];
 const VALUE_PHRASES = ['zlepšiť', 'ušetriť', 'benefit', 'výhoda', 'výsledok', 'hodnota'];
+const IMPACT_PHRASES = ['dopad', 'vplyv', 'koľko stojí', 'koľko to stojí', 'koľko nás stojí', 'náklad', 'cost', 'strácate', 'strata'];
+const SUMMARY_PHRASES = ['zhrniem', 'zhrňme', 'zhrnutie', 'sumarizujem', 'v skratke', 'ak to zhrniem'];
+const CONFIRM_PHRASES = ['sedí to', 'je to tak', 'rozumiem správne', 'chápem správne', 'je to správne', 'potvrdíte', 'pasuje to'];
+const FOLLOW_UP_PHRASES = ['ako ste spomenuli', 'ako ste vraveli', 'spomínali ste', 'nadviažem', 'nadväzujem'];
+const CERTAINTY_PHRASES = ['garantujeme', 'určite'];
 
 const NEED_PHRASES = ['trápi', 'brzdí', 'problém', 'potrebujete', 'cieľ', 'nefunguje', 'chýba', 'naráža'];
 const BASE_IMPACT_PHRASES = ['dopad', 'čo to spôsobuje', 'koľko času', 'koľko stojí', 'riziko', 'chyby', 'dopad na tím', 'dopad na ľudí'];
@@ -26,6 +31,27 @@ const DISC_SIGNALS = {
 };
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const normalizeQuestion = (text = '') => (text || '').toLowerCase().replace(/[?.!,]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const isSimilarQuestion = (prev = '', current = '') => {
+  if (!prev || !current) return false;
+  const a = normalizeQuestion(prev);
+  const b = normalizeQuestion(current);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 8 && b.length >= 8) {
+    const shorter = a.length < b.length ? a : b;
+    const longer = a.length < b.length ? b : a;
+    if (longer.includes(shorter) && shorter.length / longer.length >= 0.75) return true;
+  }
+
+  const aTokens = new Set(a.split(' '));
+  const bTokens = new Set(b.split(' '));
+  const intersection = [...aTokens].filter((t) => bTokens.has(t));
+  const overlap = intersection.length / Math.max(1, Math.min(aTokens.size, bTokens.size));
+  return overlap >= 0.7;
+};
 
 function deriveMoodDelta(signals, difficulty) {
   const positiveReasons = [];
@@ -104,22 +130,147 @@ export function analyzeSalesmanTurn({ text = '', phase = 'intro', settings = {},
   const difficulty = settings.difficulty || state.difficulty || 'intermediate';
   const clientType = settings.client_type || settings.clientType || state.clientType || 'new';
   const discProfile = settings.disc || settings.clientDiscType || state.clientDiscType;
+  const phaseCounters = state.phaseCounters || settings.phaseCounters;
 
   if (phase !== 'intro') {
-    if (phase === 'needs' || phase === 'discovery') {
-      const { needsSignals, metricDelta } = detectNeedsSignals(normalizedText, settings, state);
+    if (phase === 'needs') {
+      const lowerMessage = normalizedText.toLowerCase();
+      const questionsAsked = ((normalizedText || '').match(/\?/g) || []).length;
+      const openQuestions = ((normalizedText || '').match(OPEN_QUESTION_REGEX) || []).length;
+      const hasFollowUp = FOLLOW_UP_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+      const explainsPurpose = EXPLANATION_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+      const identifiedNeeds = (lowerMessage.match(/potreb|probl[eé]m|výzva|priorit[ay]?/g) || []).length > 0 ? 1 : 0;
+      const impactExplored = IMPACT_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+      const summarySignal = SUMMARY_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+      const confirmSignal = CONFIRM_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+      const currentQuestion = normalizedText.split('?')[0] && normalizedText.includes('?') ? normalizedText.split('?')[0] + '?' : '';
+      const repeatQuestion = isSimilarQuestion(phaseCounters?.needs?.lastQuestion, currentQuestion);
+      const earlyPitch = PRODUCT_PHRASES.some((word) => lowerMessage.includes(word));
+      const sentenceCount = (normalizedText || '').split(/[.!?]/).filter((p) => p.trim()).length;
+      const hasPressure = PRESSURE_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+      const longMonologue = sentenceCount >= 5 && questionsAsked === 0;
+      const certaintyClaim = CERTAINTY_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+      const supportedClaim = /(dát|dôkaz|referenc|príklad|case study|údaj|merani)/.test(lowerMessage);
+
+      const needsCounters = {
+        ...(phaseCounters?.needs || {}),
+      };
+
+      needsCounters.askedQuestions = (needsCounters.askedQuestions || 0) + questionsAsked;
+      needsCounters.openQuestions = (needsCounters.openQuestions || 0) + openQuestions;
+      needsCounters.identifiedNeeds = (needsCounters.identifiedNeeds || 0) + identifiedNeeds;
+      needsCounters.followUps = (needsCounters.followUps || 0) + (hasFollowUp ? 1 : 0);
+      needsCounters.impactFound = needsCounters.impactFound || impactExplored;
+      needsCounters.summaryFound = needsCounters.summaryFound || summarySignal;
+      needsCounters.confirmFound = needsCounters.confirmFound || confirmSignal;
+      needsCounters.earlyPitch = needsCounters.earlyPitch || earlyPitch;
+      if (currentQuestion) {
+        needsCounters.lastQuestion = normalizeQuestion(currentQuestion);
+      }
+
+      const phaseGateReasons = [];
+      const gatePassed =
+        needsCounters.askedQuestions >= 5 &&
+        needsCounters.openQuestions >= 3 &&
+        needsCounters.identifiedNeeds >= 2 &&
+        needsCounters.impactFound === true &&
+        needsCounters.summaryFound === true &&
+        needsCounters.confirmFound === true &&
+        needsCounters.earlyPitch !== true;
+
+      if (!gatePassed) {
+        if (needsCounters.askedQuestions < 5) phaseGateReasons.push('chýba dostatok otázok');
+        if (needsCounters.openQuestions < 3) phaseGateReasons.push('málo otvorených otázok');
+        if (needsCounters.identifiedNeeds < 2) phaseGateReasons.push('neidentifikované potreby');
+        if (!needsCounters.impactFound) phaseGateReasons.push('chýba dopad');
+        if (!needsCounters.summaryFound) phaseGateReasons.push('chýba zhrnutie');
+        if (!needsCounters.confirmFound) phaseGateReasons.push('chýba potvrdenie');
+        if (needsCounters.earlyPitch) phaseGateReasons.push('príliš skorý pitch');
+      }
+
+      const moodReasons = [];
+      let moodDeltaValue = 0;
+
+      if (hasFollowUp) {
+        moodDeltaValue += 1;
+        moodReasons.push('follow_up_found');
+      }
+      if (impactExplored) {
+        moodDeltaValue += 1;
+        moodReasons.push('impact_found');
+      }
+      if (explainsPurpose) {
+        moodDeltaValue += 1;
+        moodReasons.push('question_purpose');
+      }
+      if (summarySignal && confirmSignal) {
+        moodDeltaValue += 1;
+        moodReasons.push('summary_and_confirm');
+      }
+      if (earlyPitch && !gatePassed) {
+        const penalty = difficulty === 'expert' ? -2 : -1;
+        moodDeltaValue += penalty;
+        moodReasons.push(difficulty === 'expert' ? 'early_pitch_expert' : 'early_pitch');
+      }
+      if (repeatQuestion) {
+        moodDeltaValue -= 1;
+        moodReasons.push('repeat_question');
+      }
+
+      if (discProfile === 'D' && longMonologue) {
+        moodDeltaValue -= 1;
+        moodReasons.push('disc_d_monologue');
+      }
+      if (discProfile === 'C' && certaintyClaim && !supportedClaim) {
+        moodDeltaValue -= 1;
+        moodReasons.push('disc_c_unsupported_certainty');
+      }
+      if (discProfile === 'S' && hasPressure) {
+        moodDeltaValue -= 1;
+        moodReasons.push('disc_s_pressure');
+      }
+
+      const moodDelta = {
+        delta: clamp(moodDeltaValue, -3, 3),
+        reasons: moodReasons,
+      };
+
+      const metricDelta = {
+        questionsAsked,
+        openQuestions,
+        needsIdentified: identifiedNeeds,
+        valueStatements: VALUE_PHRASES.some((phrase) => lowerMessage.includes(phrase)) ? 1 : 0,
+      };
+
+      const notes = [
+        `needs/questions=${questionsAsked}`,
+        `needs/openQuestions=${openQuestions}`,
+        `needs/impact=${impactExplored}`,
+        `needs/summary=${summarySignal}`,
+        `needs/confirm=${confirmSignal}`,
+        `needs/followUp=${hasFollowUp}`,
+      ];
+
       return {
-        signals: needsSignals,
+        signals: {
+          questionsAsked,
+          openQuestions,
+          followUp: hasFollowUp,
+          impactExplored,
+          summarySignal,
+          confirmSignal,
+          repeatQuestion,
+          explainsPurpose,
+          earlyPitch,
+          longMonologue,
+          pressure: hasPressure,
+        },
         metricDelta,
         introFlagsDelta: {},
-        moodDelta: { delta: 0, reasons: [] },
-        phaseSignals: { needs: needsSignals },
-        notes: [
-          `needs/questions=${needsSignals.questionCount || 0}`,
-          `needs/openQuestions=${needsSignals.openQuestionCount || 0}`,
-          `needs/identified=${needsSignals.needsCount || 0}`,
-          `needs/impact=${needsSignals.impact || false}`,
-        ],
+        moodDelta,
+        phaseCounters: { needs: needsCounters },
+        phaseGate: { needs: { passed: gatePassed, reasons: phaseGateReasons } },
+        notes,
       };
     }
 
