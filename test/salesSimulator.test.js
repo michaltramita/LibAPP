@@ -20,6 +20,14 @@ test('sessionState defaults to new client type when missing', async () => {
     clientDiscType: 'D',
     industry: 'fintech',
     metrics: getInitialMetrics(),
+    introFlags: {
+      hasGoal: false,
+      hasAgenda: false,
+      hasOpenQuestion: false,
+      hasConsentSignal: false,
+      startedPitchTooEarly: false,
+      longMonologue: false,
+    },
     // intentionally no clientType
   };
 
@@ -27,8 +35,48 @@ test('sessionState defaults to new client type when missing', async () => {
     generateClientReplyForState(STATES.INTRO, '', sessionState)
   );
 
-  assert.match(response.message, /spozn\u00e1vame/i);
-  assert.strictEqual(response.reason.includes('Nov\u00fd kontakt'), true);
+  assert.match(response.message, /cie\u013e|postup/i);
+  assert.strictEqual(response.reason.includes('Potrebujem jasn\u00fd cie\u013e'), true);
+});
+
+test('detectSignalsIntro extracts intro signals and flags pitch issues', async () => {
+  const { detectSignalsIntro, getInitialIntroFlags } = await simulatorPromise;
+  const text = 'Dnes by som chcel jasne stanoviť cieľ, najprv agenda a potom demo. Prečo je to pre vás téma?';
+  const signals = detectSignalsIntro(text, { introFlags: getInitialIntroFlags() });
+
+  assert.strictEqual(signals.hasGoal, true);
+  assert.strictEqual(signals.hasAgenda, true);
+  assert.ok(signals.openQuestions >= 1);
+  assert.strictEqual(signals.startedPitchTooEarly, false);
+
+  const pitchText = 'Máme skvelý produkt a modul, ktorý vám pomôže. Toto je moja dlhá veta jedna. Toto je druhá. Toto je tretia. Toto je štvrtá. Toto je piata. Toto je šiesta.';
+  const pitchSignals = detectSignalsIntro(pitchText, { introFlags: getInitialIntroFlags() });
+  assert.strictEqual(pitchSignals.startedPitchTooEarly, true);
+  assert.strictEqual(pitchSignals.longMonologue, true);
+});
+
+test('intro gate evaluates required signals and blocks on pitch issues', async () => {
+  const { isIntroGateSatisfied } = await simulatorPromise;
+
+  const baseSession = {
+    metrics: { questionsAsked: 1, openQuestions: 1 },
+    introFlags: {
+      hasGoal: true,
+      hasAgenda: true,
+      hasOpenQuestion: true,
+      hasConsentSignal: true,
+      startedPitchTooEarly: false,
+      longMonologue: false,
+    },
+  };
+
+  assert.strictEqual(isIntroGateSatisfied(baseSession), true);
+
+  const blockedSession = {
+    ...baseSession,
+    introFlags: { ...baseSession.introFlags, startedPitchTooEarly: true },
+  };
+  assert.strictEqual(isIntroGateSatisfied(blockedSession), false);
 });
 
 test('new client responses stay general across states', async () => {
@@ -39,6 +87,14 @@ test('new client responses stay general across states', async () => {
     clientType: 'new',
     industry: 'cloud',
     metrics: getInitialMetrics(),
+    introFlags: {
+      hasGoal: true,
+      hasAgenda: true,
+      hasOpenQuestion: false,
+      hasConsentSignal: false,
+      startedPitchTooEarly: false,
+      longMonologue: false,
+    },
   };
 
   const intro = generateClientReplyForState(STATES.INTRO, '', sessionState);
@@ -63,6 +119,14 @@ test('repeat client responses reference history and personalization', async () =
     clientType: 'repeat',
     industry: 'logistika',
     metrics: getInitialMetrics(),
+    introFlags: {
+      hasGoal: true,
+      hasAgenda: true,
+      hasOpenQuestion: false,
+      hasConsentSignal: false,
+      startedPitchTooEarly: false,
+      longMonologue: false,
+    },
   };
 
   const intro = generateClientReplyForState(STATES.INTRO, '', sessionState);
