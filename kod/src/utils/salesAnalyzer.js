@@ -17,6 +17,18 @@ const CONFIRM_PHRASES = ['sedí to?', 'je to tak?', 'chápem správne?', 'súhla
 const FOLLOW_UP_PHRASES = ['spomenuli ste', 'hovorili ste', 'vraveli ste', 'keď ste povedali', 'k tomu'];
 const EARLY_PITCH_PHRASES = ['ponúkame', 'naše riešenie', 'produkt', 'balík', 'implementácia', 'cenník', 'demo'];
 const OPEN_STARTERS = ['ako', 'čo', 'prečo', 'kedy', 'kde', 'kto', 'aký', 'koľko', 'ktor'];
+const OFFER_BRIDGE_PHRASES = ['hovorili ste, že', 'spomenuli ste', 'ako ste vraveli', 'ak to správne chápem'];
+const OFFER_REACTION_QUESTIONS = [
+  'ako to na vás pôsobí',
+  'ako to sedí',
+  'čo na to hovoríte',
+  'čo by ste k tomu potrebovali vedieť',
+  'čo je pre vás najdôležitejšie',
+  'sedí to?',
+];
+const OFFER_FEATURE_KEYWORDS = ['dashboard', 'integráci', 'reporting', 'pipeline', 'automatizáci', 'modul', 'funkci', 'feature'];
+const OFFER_BENEFIT_KEYWORDS = ['ušetr', 'zníž', 'zlepší', 'pomôž', 'benefit', 'prínos', 'hodnot', 'výsled', 'dopad', 'riziko', 'chyby', 'úspech'];
+const OFFER_PROPOSAL_CUES = ['navrhujem', 'riešenie je', 'odporúčam', 'môžeme', 'môj návrh', 'ponúk'];
 
 const DISC_SIGNALS = {
   D: ['roi', 'výsledok', 'výsledky', 'termín', 'tempo'],
@@ -119,6 +131,22 @@ export function analyzeSalesmanTurn({ text = '', phase = 'intro', settings = {},
           `needs/openQuestions=${needsSignals.openQuestionCount || 0}`,
           `needs/identified=${needsSignals.needsCount || 0}`,
           `needs/impact=${needsSignals.impact || false}`,
+        ],
+      };
+    }
+
+    if (phase === 'offer' || phase === 'presentation') {
+      const { offerSignals, metricDelta } = detectOfferSignals(normalizedText);
+      return {
+        signals: {},
+        metricDelta,
+        introFlagsDelta: {},
+        moodDelta: { delta: 0, reasons: [] },
+        phaseSignals: { offer: offerSignals },
+        notes: [
+          `offer/value=${offerSignals.valueStatementsCount || 0}`,
+          `offer/features=${offerSignals.featurePitchCount || 0}`,
+          `offer/reactionQ=${offerSignals.reactionQuestion || false}`,
         ],
       };
     }
@@ -241,4 +269,60 @@ export function deriveMoodFromScore(score) {
 
 export function updateMoodScore(previousScore = 0, delta = 0) {
   return clamp(previousScore + delta, -3, 3);
+}
+
+function detectOfferSignals(text = '') {
+  const normalizedText = text || '';
+  const lower = normalizedText.toLowerCase();
+  const sentences = normalizedText
+    .split(/[.!?]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const questionCount = (normalizedText.match(/\?/g) || []).length;
+  const openQuestionMatches = normalizedText.match(OPEN_QUESTION_REGEX) || [];
+  let valueStatementsCount = 0;
+  let featurePitchCount = 0;
+
+  sentences.forEach((sentence) => {
+    const lowerSentence = sentence.toLowerCase();
+    const hasBenefitCue = OFFER_BENEFIT_KEYWORDS.some((kw) => lowerSentence.includes(kw));
+    const tiesToNeed =
+      NEED_PHRASES.some((kw) => lowerSentence.includes(kw)) ||
+      OFFER_BRIDGE_PHRASES.some((kw) => lowerSentence.includes(kw)) ||
+      /\bv(a|á)m\b|\bv(a|á)š\b|\bv(a|á)še\b/.test(lowerSentence);
+    const hasFeatureCue = OFFER_FEATURE_KEYWORDS.some((kw) => lowerSentence.includes(kw));
+    if (hasBenefitCue) {
+      valueStatementsCount += 1;
+    } else if (hasFeatureCue && !hasBenefitCue && !tiesToNeed) {
+      featurePitchCount += 1;
+    }
+  });
+
+  const bridgedFromNeeds = OFFER_BRIDGE_PHRASES.some((phrase) => lower.includes(phrase));
+  const reactionQuestion = OFFER_REACTION_QUESTIONS.some((phrase) => lower.includes(phrase));
+
+  const needReference = bridgedFromNeeds || NEED_PHRASES.some((phrase) => lower.includes(phrase));
+  const proposalCue = OFFER_PROPOSAL_CUES.some((phrase) => lower.includes(phrase));
+  const benefitCue = valueStatementsCount > 0 || OFFER_BENEFIT_KEYWORDS.some((kw) => lower.includes(kw));
+  const structureHit = needReference && proposalCue && benefitCue;
+
+  const questionDelta = reactionQuestion ? Math.max(questionCount, 1) : questionCount;
+  const openQuestionDelta = reactionQuestion ? Math.max(openQuestionMatches.length, 1) : openQuestionMatches.length;
+
+  const offerSignals = {
+    valueStatementsCount,
+    featurePitchCount,
+    bridgedFromNeeds,
+    reactionQuestion,
+    structureHit,
+  };
+
+  const metricDelta = {
+    valueStatements: valueStatementsCount,
+    questionsAsked: questionDelta,
+    openQuestions: openQuestionDelta,
+  };
+
+  return { offerSignals, metricDelta };
 }

@@ -109,6 +109,46 @@ test('needs analyzer identifies multiple needs statements', async () => {
   assert.ok((analysis.metricDelta.identifiedNeeds || 0) >= 2);
 });
 
+test('offer analyzer counts value statements and feature pitches distinctly', async () => {
+  const { analyzeSalesmanTurn } = await analyzerPromise;
+  const valueText =
+    'Hovorili ste, že vás trápi manuálny reporting. Navrhujem automatizáciu follow-upov, ušetrí vám to čas tímu. ' +
+    'Zníži to chyby v reporte a riziko oneskorenia. Pomôže vám to dosiahnuť cieľ rýchlejšej adaptácie.';
+  const analysisValue = analyzeSalesmanTurn({ text: valueText, phase: 'offer' });
+
+  assert.strictEqual(analysisValue.phaseSignals.offer.valueStatementsCount, 3);
+  assert.strictEqual(analysisValue.phaseSignals.offer.featurePitchCount, 0);
+
+  const featureText = 'Máme dashboard, integrácie a reporting pre pipeline. Funkcie zahŕňajú modul a automatizácie.';
+  const analysisFeature = analyzeSalesmanTurn({ text: featureText, phase: 'offer' });
+
+  assert.strictEqual(analysisFeature.phaseSignals.offer.valueStatementsCount, 0);
+  assert.ok(analysisFeature.phaseSignals.offer.featurePitchCount >= 2);
+});
+
+test('offer analyzer detects bridge cues and reaction questions', async () => {
+  const { analyzeSalesmanTurn } = await analyzerPromise;
+  const bridgeText = 'Spomenuli ste chaos v procesoch, takže navrhujem zjednotenie. Ako to na vás pôsobí?';
+  const analysis = analyzeSalesmanTurn({ text: bridgeText, phase: 'offer' });
+
+  assert.strictEqual(analysis.phaseSignals.offer.bridgedFromNeeds, true);
+  assert.strictEqual(analysis.phaseSignals.offer.reactionQuestion, true);
+  assert.ok((analysis.metricDelta.openQuestions || 0) >= 1);
+});
+
+test('offer analyzer captures structure hit and metric deltas', async () => {
+  const { analyzeSalesmanTurn } = await analyzerPromise;
+  const text =
+    'Ak to správne chápem, brzdí vás manuálny onboarding. Odporúčam zaviesť automatizáciu, ušetrí vám to čas a prinesie jasný výsledok. ' +
+    'Ako to sedí na vašu situáciu?';
+  const analysis = analyzeSalesmanTurn({ text, phase: 'offer' });
+
+  assert.strictEqual(analysis.phaseSignals.offer.structureHit, true);
+  assert.ok((analysis.metricDelta.valueStatements || 0) >= 1);
+  assert.ok((analysis.metricDelta.questionsAsked || 0) >= 1);
+  assert.ok((analysis.metricDelta.openQuestions || 0) >= 1);
+});
+
 test('unified analyzer catches early pitch monologue and blocks gate', async () => {
   const { analyzeSalesMessage, isIntroGateSatisfied, getInitialMetrics, getInitialIntroFlags, STATES } = await simulatorPromise;
   const pitchText = 'Máme skvelý produkt a modul, ktorý vám pomôže. Toto je moja dlhá veta jedna. Toto je druhá. Toto je tretia. Toto je štvrtá. Toto je piata. Toto je šiesta.';
