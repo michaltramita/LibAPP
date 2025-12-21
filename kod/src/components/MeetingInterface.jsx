@@ -74,8 +74,8 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     industry: config.industry,
     clientMood: 'neutral',
     clientMoodReason: 'Čaká na viac informácií',
-    moodLevel: getStartingMoodLevel({ difficulty: config.difficulty, clientDiscType: config.clientDiscType }),
-    lastMoodReason: 'Počiatočná nálada podľa profilu a obtiažnosti.',
+    moodScore: 0,
+    moodReasons: [],
   });
   
   const [messages, setMessages] = useState([]);
@@ -175,22 +175,13 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     setIsTyping(true);
 
     setTimeout(() => {
-      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, shouldEnd, moodLevel, moodReason, sessionState: returnedSessionState } = generateClientReply(
+      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, introFlags, shouldEnd, moodScore, moodReasons } = generateClientReply(
         sessionState.currentState,
         salesmanMessage.text,
         sessionState
       );
       
-      const newSessionState = { 
-        ...sessionState, 
-        ...returnedSessionState,
-        currentState: newState, 
-        metrics: updatedMetrics, 
-        clientMood, 
-        clientMoodReason,
-        moodLevel: moodLevel ?? returnedSessionState?.moodLevel,
-        lastMoodReason: moodReason || returnedSessionState?.lastMoodReason,
-      };
+      const newSessionState = { ...sessionState, currentState: newState, metrics: updatedMetrics, introFlags, clientMood, clientMoodReason, moodScore, moodReasons };
       setSessionState(newSessionState);
 
       const clientMessageObj = { type: 'client', text: clientMessage, timestamp: new Date() };

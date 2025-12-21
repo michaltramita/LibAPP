@@ -2,6 +2,7 @@ const assert = require('assert');
 const { test } = require('node:test');
 
 const simulatorPromise = import('../kod/src/utils/salesSimulator.js');
+const analyzerPromise = import('../kod/src/utils/salesAnalyzer.js');
 
 function withFixedRandom(value, fn) {
   const originalRandom = Math.random;
@@ -53,6 +54,60 @@ test('detectSignalsIntro extracts intro signals and flags pitch issues', async (
   const pitchSignals = detectSignalsIntro(pitchText, { introFlags: getInitialIntroFlags() });
   assert.strictEqual(pitchSignals.startedPitchTooEarly, true);
   assert.strictEqual(pitchSignals.longMonologue, true);
+});
+
+test('analyzeSalesmanTurn produces unified deltas for intro agenda + consent + open question', async () => {
+  const { analyzeSalesmanTurn } = await analyzerPromise;
+  const text = 'Dnes by som chcel jasne stanoviť cieľ. Najprv prejdeme otázky, potom možnosti a na záver ďalší krok. Môžeme takto? Ako dnes vyzerá vaša situácia?';
+  const analysis = analyzeSalesmanTurn({
+    text,
+    phase: 'intro',
+    settings: { difficulty: 'beginner', client_type: 'new' },
+    state: {},
+  });
+
+  assert.strictEqual(analysis.introFlagsDelta.goalFramed, true);
+  assert.strictEqual(analysis.introFlagsDelta.agendaProposed, true);
+  assert.strictEqual(analysis.introFlagsDelta.consentObtained, true);
+  assert.strictEqual(analysis.introFlagsDelta.diagnosticStarted, true);
+  assert.ok((analysis.metricDelta.questionsAsked || 0) >= 1);
+  assert.ok((analysis.metricDelta.openQuestions || 0) >= 1);
+  assert.strictEqual(analysis.moodDelta.delta, 1);
+});
+
+test('unified analyzer catches early pitch monologue and blocks gate', async () => {
+  const { analyzeSalesMessage, isIntroGateSatisfied, getInitialMetrics, getInitialIntroFlags, STATES } = await simulatorPromise;
+  const pitchText = 'Máme skvelý produkt a modul, ktorý vám pomôže. Toto je moja dlhá veta jedna. Toto je druhá. Toto je tretia. Toto je štvrtá. Toto je piata. Toto je šiesta.';
+  const sessionState = {
+    difficulty: 'intermediate',
+    clientType: 'new',
+    clientDiscType: 'D',
+    introFlags: getInitialIntroFlags(),
+  };
+  const { metrics, introFlags } = analyzeSalesMessage(pitchText, getInitialMetrics(), STATES.INTRO, sessionState);
+
+  assert.strictEqual(introFlags.startedPitchTooEarly, true);
+  assert.strictEqual(introFlags.longMonologue, true);
+  assert.strictEqual(isIntroGateSatisfied({ metrics, introFlags }), false);
+  assert.strictEqual(introFlags._moodScore < 0, true);
+});
+
+test('expert difficulty penalizes pitch monologue mood faster', async () => {
+  const { analyzeSalesMessage, getInitialMetrics, getInitialIntroFlags, STATES } = await simulatorPromise;
+  const pitchText = 'Predstavím vám produkt, modul a ponuku. Toto je dlhé rozprávanie bez otázok.';
+
+  const beginnerAnalysis = analyzeSalesMessage(pitchText, getInitialMetrics(), STATES.INTRO, {
+    difficulty: 'beginner',
+    clientType: 'new',
+    introFlags: getInitialIntroFlags(),
+  });
+  const expertAnalysis = analyzeSalesMessage(pitchText, getInitialMetrics(), STATES.INTRO, {
+    difficulty: 'expert',
+    clientType: 'new',
+    introFlags: getInitialIntroFlags(),
+  });
+
+  assert.strictEqual((beginnerAnalysis.introFlags._moodScore || 0) > (expertAnalysis.introFlags._moodScore || 0), true);
 });
 
 test('intro gate evaluates required signals and blocks on pitch issues', async () => {

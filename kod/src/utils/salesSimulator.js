@@ -1,4 +1,5 @@
 // Comprehensive Sales Conversation Simulator Logic
+import { analyzeSalesmanTurn, deriveMoodFromScore, updateMoodScore } from './salesAnalyzer.js';
 
 // --- CONFIGURATION ---
 
@@ -90,7 +91,12 @@ const DISC_MOOD_DEFAULT = {
  * This is the main function called by the UI.
  */
 export const generateClientReply = (currentState, userMessage, sessionState) => {
-  const normalizedSessionState = ensureSessionDefaults(sessionState);
+  const normalizedSessionState = {
+    clientType: sessionState.clientType || 'new',
+    introFlags: sessionState.introFlags || getInitialIntroFlags(),
+    moodScore: sessionState.moodScore || 0,
+    ...sessionState,
+  };
   const { metrics, difficulty, clientDiscType } = normalizedSessionState;
 
   // 1. Analyze user's message and update metrics
@@ -124,7 +130,14 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
   const clientReply = generateClientReplyForState(nextState, userMessage, normalizedSessionState, updatedMetrics);
 
   // 4. Style the response based on DISC profile
-  const styledReply = styleResponseByDISC(clientReply, clientDiscType, sessionWithIntro.clientType);
+  const moodScore = sessionWithIntro.introFlags._moodScore ?? normalizedSessionState.moodScore ?? 0;
+  const moodReasons = sessionWithIntro.introFlags._moodReasons || [];
+  const derivedMood = currentState === STATES.INTRO ? deriveMoodFromScore(moodScore) : clientReply.mood;
+  const styledReply = styleResponseByDISC(
+    { ...clientReply, mood: derivedMood },
+    clientDiscType,
+    sessionWithIntro.clientType
+  );
 
   const shouldEnd = nextState === STATES.FINISHED || (currentState === STATES.CLOSING && Math.random() < 0.5);
   const phaseFeedback = currentState === STATES.INTRO && (nextState !== STATES.INTRO || (introSignals && introSignals.attemptToMoveOn))
@@ -140,10 +153,8 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
     updatedMetrics: updatedMetrics,
     introFlags: updatedIntroFlags,
     shouldEnd: shouldEnd,
-    moodLevel: normalizedSessionState.moodLevel,
-    moodReason,
-    phaseFeedback,
-    sessionState: normalizedSessionState,
+    moodScore: sessionWithIntro.introFlags._moodScore || normalizedSessionState.moodScore || 0,
+    moodReasons,
   };
 };
 
@@ -408,35 +419,19 @@ export const getInitialIntroFlags = () => ({
 });
 
 export function detectSignalsIntro(text, sessionState) {
-  const lowerMessage = (text || '').toLowerCase();
-  const questionsAsked = (lowerMessage.match(/\?/g) || []).length;
-
-  const openQuestionRegex = /(\bako\b|\bprečo\b|\bčo\b|\bkde\b|\bkedy\b|\bakým\b[^?]*|\baky\b|\baké\b|\baka\b)[^?]*\?/gi;
-  let openQuestions = (text.match(openQuestionRegex) || []).length;
-  const openQuestionPhrases = ['povedzte mi', 'ako dnes'];
-  if (openQuestionPhrases.some((phrase) => lowerMessage.includes(phrase))) {
-    openQuestions = Math.max(openQuestions, 1);
-  }
-
-  const hasGoal = ['cieľ', 'dôvod', 'dnes by som chcel', 'chceme dosiahnuť'].some((word) => lowerMessage.includes(word));
-  const hasAgenda = ['najprv', 'potom', 'na záver', 'agenda', 'postup'].some((word) => lowerMessage.includes(word));
-  const hasConsentQuestion = ['môžeme takto', 'je to ok', 'je to okej', 'sedí vám', 'je to v poriadku'].some((phrase) => lowerMessage.includes(phrase));
-
-  const productWords = ['produkt', 'funkci', 'modul', 'ponuku', 'cena', 'licenc', 'demo', 'riešenie'];
-  const startedPitchTooEarly = productWords.some((word) => lowerMessage.includes(word)) && openQuestions === 0;
-
-  const sentenceCount = (text.split(/[.!?]/).filter((part) => part.trim().length > 0)).length;
-  const longMonologue = sentenceCount >= 6 && questionsAsked === 0;
+  const analysis = analyzeSalesmanTurn({ text, phase: 'intro', settings: sessionState, state: sessionState });
+  const { signals, metricDelta, introFlagsDelta } = analysis;
 
   return {
-    questionsAsked,
-    openQuestions,
-    hasGoal,
-    hasAgenda,
-    hasOpenQuestion: openQuestions > 0,
-    hasConsentQuestion,
-    startedPitchTooEarly,
-    longMonologue,
+    questionsAsked: metricDelta.questionsAsked || 0,
+    openQuestions: metricDelta.openQuestions || 0,
+    hasGoal: introFlagsDelta.goalFramed || false,
+    hasAgenda: introFlagsDelta.agendaProposed || false,
+    hasOpenQuestion: introFlagsDelta.diagnosticStarted || false,
+    hasConsentQuestion: introFlagsDelta.consentObtained || false,
+    startedPitchTooEarly: introFlagsDelta.earlyPitchDetected || false,
+    longMonologue: introFlagsDelta.longMonologue || false,
+    signals,
   };
 }
 
@@ -458,7 +453,7 @@ export function isIntroGateSatisfied(sessionState) {
 /**
  * Analyzes the user's message to update performance metrics.
  */
-function analyzeSalesMessage(message, currentMetrics, state, sessionState) {
+export function analyzeSalesMessage(message, currentMetrics, state, sessionState) {
     const introFlags = { ...(sessionState.introFlags || getInitialIntroFlags()) };
     if (!message) {
       return { metrics: currentMetrics, introFlags };
@@ -468,40 +463,29 @@ function analyzeSalesMessage(message, currentMetrics, state, sessionState) {
     const lowerMessage = message.toLowerCase();
 
     if (state === STATES.INTRO) {
-        const signals = detectSignalsIntro(message, sessionState);
-        newMetrics.questionsAsked += signals.questionsAsked;
-        newMetrics.openQuestions += signals.openQuestions;
+        const analysis = analyzeSalesmanTurn({
+          text: message,
+          phase: 'intro',
+          settings: sessionState,
+          state: sessionState,
+        });
 
-        introFlags.hasGoal = introFlags.hasGoal || signals.hasGoal;
-        introFlags.hasAgenda = introFlags.hasAgenda || signals.hasAgenda;
-        introFlags.hasOpenQuestion = introFlags.hasOpenQuestion || signals.hasOpenQuestion;
-        introFlags.startedPitchTooEarly = introFlags.startedPitchTooEarly || signals.startedPitchTooEarly;
-        introFlags.longMonologue = introFlags.longMonologue || signals.longMonologue;
-        if (signals.hasConsentQuestion) {
-            introFlags.hasConsentSignal = true;
-        }
+        newMetrics.questionsAsked += analysis.metricDelta.questionsAsked || 0;
+        newMetrics.openQuestions += analysis.metricDelta.openQuestions || 0;
+        newMetrics.valueStatements += analysis.metricDelta.valueStatements || 0;
+        newMetrics.adaptationToDISC += analysis.metricDelta.adaptationToDISC || 0;
 
-        // Adaptation simple heuristic for intro
-        if (sessionState.clientType === 'repeat') {
-            const discSignals = {
-                D: ['roi', 'výsledok', 'výsledky', 'termín'],
-                C: ['dáta', 'parametre', 'analýza', 'presnosť'],
-                S: ['podpora', 'bezpečnosť', 'bezpečné', 'stabilita'],
-                I: ['ľudia', 'spolupráca', 'tím', 'partnerstvo'],
-            };
-            const profile = sessionState.clientDiscType ?? null;
-            if (profile && discSignals[profile]) {
-                if (discSignals[profile].some((word) => lowerMessage.includes(word))) {
-                    newMetrics.adaptationToDISC += 1;
-                }
-            } else if (Object.values(discSignals).some((words) => words.some((word) => lowerMessage.includes(word)))) {
-                newMetrics.adaptationToDISC += 1;
-            }
-        } else {
-            if (signals.hasAgenda && !signals.startedPitchTooEarly) {
-                newMetrics.adaptationToDISC += 1;
-            }
-        }
+        introFlags.hasGoal = introFlags.hasGoal || analysis.introFlagsDelta.goalFramed;
+        introFlags.hasAgenda = introFlags.hasAgenda || analysis.introFlagsDelta.agendaProposed;
+        introFlags.hasOpenQuestion = introFlags.hasOpenQuestion || analysis.introFlagsDelta.diagnosticStarted;
+        introFlags.hasConsentSignal = introFlags.hasConsentSignal || analysis.introFlagsDelta.consentObtained;
+        introFlags.startedPitchTooEarly = introFlags.startedPitchTooEarly || analysis.introFlagsDelta.earlyPitchDetected;
+        introFlags.longMonologue = introFlags.longMonologue || analysis.introFlagsDelta.longMonologue;
+
+        // Mood handling for intro
+        const updatedMoodScore = updateMoodScore(sessionState.moodScore || 0, analysis.moodDelta.delta);
+        introFlags._moodScore = updatedMoodScore;
+        introFlags._moodReasons = analysis.moodDelta.reasons;
     } else {
         // Questions
         const questionCount = (lowerMessage.match(/\?/g) || []).length;
@@ -526,7 +510,7 @@ function analyzeSalesMessage(message, currentMetrics, state, sessionState) {
         
         // Objections
         if (state === STATES.OBJECTIONS) {
-            newMetrics.objectionHandlingAttempts += 1;
+          newMetrics.objectionHandlingAttempts += 1;
             // Simple heuristic for good handling
             if (lowerMessage.includes('rozumiem vašej obave') || lowerMessage.includes('je to legitímna otázka')) {
                 newMetrics.objectionsHandledWell += 1;
@@ -785,6 +769,7 @@ export function buildFinalFeedback(sessionState) {
 export const evaluateMeeting = (messages, config) => {
     let tempMetrics = getInitialMetrics();
     let introFlags = getInitialIntroFlags();
+    let moodScore = 0;
     let currentState = STATES.INTRO;
 
     const salesmanMessages = messages.filter(m => m.type === 'salesman').map(m => m.text);
@@ -798,13 +783,15 @@ export const evaluateMeeting = (messages, config) => {
     };
 
     for(const msg of salesmanMessages) {
-        const analysis = analyzeSalesMessage(msg, tempMetrics, currentState, { ...sessionState, introFlags });
+        const analysis = analyzeSalesMessage(msg, tempMetrics, currentState, { ...sessionState, introFlags, moodScore });
         tempMetrics = analysis.metrics;
         introFlags = analysis.introFlags;
+        moodScore = introFlags._moodScore || moodScore;
         currentState = getNextState(currentState, msg, tempMetrics, { ...sessionState, introFlags });
     }
     sessionState.metrics = tempMetrics;
     sessionState.introFlags = introFlags;
+    sessionState.moodScore = moodScore;
     
     return buildFinalFeedback(sessionState);
 };

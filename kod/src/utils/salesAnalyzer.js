@@ -1,0 +1,162 @@
+const OPEN_QUESTION_REGEX = /(\bako\b|\bprečo\b|\bčo\b|\bkde\b|\bkedy\b|\bktor\w*\b|\bpre ktor\w*\b|\bakým spôsobom\b|\bak\w*\b)[^?]*\?/gi;
+
+const GOAL_PHRASES = ['cieľ', 'dôvod', 'účel', 'chcel by som dosiahnuť', 'dnes by som chcel', 'chceme dosiahnuť'];
+const AGENDA_PHRASES = ['najprv', 'potom', 'na záver', 'agenda', 'postup', 'struktúru'];
+const CONSENT_PHRASES = ['môžeme takto', 'môžeme začať', 'je to ok', 'je to okej', 'sedí vám', 'je to v poriadku', 'ste za'];
+const EXPLANATION_PHRASES = ['aby som vedel', 'aby som vedela', 'aby som mohol', 'aby som mohla', 'chcem pochopiť', 'potrebujem vedieť'];
+const PRESSURE_PHRASES = ['musíme rozhodnúť dnes', 'potrebujem potvrdiť hneď', 'do konca dňa', 'ihneď potvrdiť', 'okamžite rozhodnúť'];
+const PRODUCT_PHRASES = ['produkt', 'funkci', 'modul', 'ponuku', 'cena', 'licenc', 'demo', 'riešenie', 'feature', 'ponuka'];
+const VALUE_PHRASES = ['zlepšiť', 'ušetriť', 'benefit', 'výhoda', 'výsledok', 'hodnota'];
+
+const DISC_SIGNALS = {
+  D: ['roi', 'výsledok', 'výsledky', 'termín', 'tempo'],
+  C: ['dáta', 'parametre', 'analýza', 'presnosť', 'compliance'],
+  S: ['podpora', 'bezpečnosť', 'bezpečné', 'stabilita', 'tím'],
+  I: ['ľudia', 'spolupráca', 'tím', 'partnerstvo', 'energia'],
+};
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+function deriveMoodDelta(signals, difficulty) {
+  const positiveReasons = [];
+  const negativeReasons = [];
+
+  if (signals.clearAgenda) positiveReasons.push('clear_agenda');
+  if (signals.hasOpenQuestion) positiveReasons.push('open_question');
+  if (signals.explainsWhyAsking) positiveReasons.push('explains_why');
+
+  if (signals.earlyPitch) negativeReasons.push('early_pitch');
+  if (signals.isLongMonologue) negativeReasons.push('monologue');
+  if (signals.hasPressure) negativeReasons.push('pressure');
+  if (signals.discMismatch) negativeReasons.push('disc_mismatch');
+  if (difficulty === 'expert' && (signals.earlyPitch || signals.isLongMonologue)) {
+    negativeReasons.push('expert_fast_penalty');
+  }
+  if (difficulty === 'beginner' && (signals.clearAgenda || signals.hasOpenQuestion)) {
+    positiveReasons.push('beginner_bonus');
+  }
+
+  const moodBias = difficulty === 'beginner' ? 1 : difficulty === 'expert' ? -1 : 0;
+  const raw = positiveReasons.length - negativeReasons.length + moodBias;
+  const delta = raw > 0 ? 1 : raw < 0 ? -1 : 0;
+  const reasons = delta > 0 ? positiveReasons : delta < 0 ? negativeReasons : [...positiveReasons, ...negativeReasons];
+
+  return { delta: clamp(delta, -1, 1), reasons };
+}
+
+function detectIntroSignals(text) {
+  const lowerMessage = (text || '').toLowerCase();
+  const sentences = (text || '').split(/[.!?]/).filter((part) => part.trim().length > 0);
+  const questionsAsked = ((text || '').match(/\?/g) || []).length;
+
+  let openQuestions = ((text || '').match(OPEN_QUESTION_REGEX) || []).length;
+  const openQuestionPhrases = ['povedzte mi', 'ako dnes'];
+  if (openQuestionPhrases.some((phrase) => lowerMessage.includes(phrase))) {
+    openQuestions = Math.max(openQuestions, 1);
+  }
+
+  const hasGoalFraming = GOAL_PHRASES.some((word) => lowerMessage.includes(word));
+  const hasAgenda = AGENDA_PHRASES.some((word) => lowerMessage.includes(word));
+  const asksForConsent = CONSENT_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+  const explainsWhyAsking = EXPLANATION_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+
+  const earlyPitch = PRODUCT_PHRASES.some((word) => lowerMessage.includes(word)) && openQuestions === 0;
+  const isLongMonologue = sentences.length >= 6 && questionsAsked === 0;
+  const hasPressure = PRESSURE_PHRASES.some((phrase) => lowerMessage.includes(phrase));
+  const clearAgenda = hasAgenda && sentences.length <= 3 && !earlyPitch;
+
+  const valueStatements = VALUE_PHRASES.some((phrase) => lowerMessage.includes(phrase)) ? 1 : 0;
+
+  return {
+    signals: {
+      hasQuestion: questionsAsked > 0,
+      hasOpenQuestion: openQuestions > 0,
+      hasGoalFraming,
+      hasAgenda,
+      asksForConsent,
+      diagnosticQuestion: openQuestions > 0,
+      earlyPitch,
+      isLongMonologue,
+      hasPressure,
+      clearAgenda,
+      explainsWhyAsking,
+      valueStatements,
+      questionCount: questionsAsked,
+      openQuestionCount: openQuestions,
+      discMismatch: false,
+    },
+    valueStatements,
+  };
+}
+
+export function analyzeSalesmanTurn({ text = '', phase = 'intro', settings = {}, state = {} }) {
+  const normalizedText = text || '';
+  const difficulty = settings.difficulty || state.difficulty || 'intermediate';
+  const clientType = settings.client_type || settings.clientType || state.clientType || 'new';
+  const discProfile = settings.disc || settings.clientDiscType || state.clientDiscType;
+
+  if (phase !== 'intro') {
+    return {
+      signals: {},
+      metricDelta: {},
+      introFlagsDelta: {},
+      moodDelta: { delta: 0, reasons: [] },
+      notes: ['No analyzer implemented for this phase'],
+    };
+  }
+
+  const { signals, valueStatements } = detectIntroSignals(normalizedText);
+
+  let adaptationDelta = 0;
+  if (clientType === 'repeat' && discProfile && DISC_SIGNALS[discProfile]) {
+    if (DISC_SIGNALS[discProfile].some((word) => normalizedText.toLowerCase().includes(word))) {
+      adaptationDelta += 1;
+    }
+  } else if (clientType === 'new' && signals.hasAgenda && !signals.earlyPitch) {
+    adaptationDelta += 1;
+  }
+
+  const introFlagsDelta = {
+    goalFramed: signals.hasGoalFraming,
+    agendaProposed: signals.hasAgenda,
+    consentObtained: signals.asksForConsent,
+    diagnosticStarted: signals.hasOpenQuestion,
+    earlyPitchDetected: signals.earlyPitch,
+    longMonologue: signals.isLongMonologue,
+  };
+
+  const metricDelta = {
+    questionsAsked: signals.questionCount,
+    openQuestions: signals.openQuestionCount,
+    valueStatements,
+    objectionHandlingAttempts: 0,
+    objectionsHandledWell: 0,
+    closingAttempts: 0,
+    needsIdentified: 0,
+    adaptationToDISC: adaptationDelta,
+  };
+
+  const moodDelta = deriveMoodDelta(signals, difficulty);
+  const notes = [
+    `intro/questions=${signals.questionCount}`,
+    `intro/openQuestions=${signals.openQuestionCount}`,
+    `intro/agenda=${signals.hasAgenda}`,
+    `intro/goal=${signals.hasGoalFraming}`,
+    `intro/consent=${signals.asksForConsent}`,
+    `intro/pressure=${signals.hasPressure}`,
+  ];
+
+  return { signals, metricDelta, introFlagsDelta, moodDelta, notes };
+}
+
+export function deriveMoodFromScore(score) {
+  if (score >= 2) return 'positive';
+  if (score === 1) return 'interested';
+  if (score === 0) return 'neutral';
+  if (score <= -2) return 'negative';
+  return 'skeptical';
+}
+
+export function updateMoodScore(previousScore = 0, delta = 0) {
+  return clamp(previousScore + delta, -3, 3);
+}
