@@ -5,7 +5,7 @@ import {
   Send, Mic, MicOff, User, Bot, PlayCircle, Search, Lightbulb, ThumbsDown, Award, Flag, CheckCircle, Volume2, BarChart2
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { generateClientReply, getInitialMetrics } from '@/utils/salesSimulator';
+import { generateClientReply, getInitialMetrics, getStartingMoodLevel } from '@/utils/salesSimulator';
 import { cn } from '@/lib/utils';
 
 
@@ -73,6 +73,8 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     industry: config.industry,
     clientMood: 'neutral',
     clientMoodReason: 'Čaká na viac informácií',
+    moodLevel: getStartingMoodLevel({ difficulty: config.difficulty, clientDiscType: config.clientDiscType }),
+    lastMoodReason: 'Počiatočná nálada podľa profilu a obtiažnosti.',
   });
   
   const [messages, setMessages] = useState([]);
@@ -123,7 +125,14 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     const initialReply = generateClientReply('intro', '', sessionState);
     const msgObj = { type: 'client', text: initialReply.clientMessage, timestamp: new Date() };
     setMessages([msgObj]);
-    setSessionState(s => ({ ...s, clientMood: initialReply.clientMood, clientMoodReason: initialReply.clientMoodReason }));
+    setSessionState((s) => ({
+      ...s,
+      ...initialReply.sessionState,
+      clientMood: initialReply.clientMood,
+      clientMoodReason: initialReply.clientMoodReason,
+      moodLevel: initialReply.moodLevel ?? initialReply.sessionState?.moodLevel ?? s.moodLevel,
+      lastMoodReason: initialReply.moodReason || initialReply.sessionState?.lastMoodReason || s.lastMoodReason,
+    }));
     speakText(initialReply.clientMessage);
     
     return () => window.speechSynthesis.cancel();
@@ -165,13 +174,22 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     setIsTyping(true);
 
     setTimeout(() => {
-      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, shouldEnd } = generateClientReply(
+      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, shouldEnd, moodLevel, moodReason, sessionState: returnedSessionState } = generateClientReply(
         sessionState.currentState,
         salesmanMessage.text,
         sessionState
       );
       
-      const newSessionState = { ...sessionState, currentState: newState, metrics: updatedMetrics, clientMood, clientMoodReason };
+      const newSessionState = { 
+        ...sessionState, 
+        ...returnedSessionState,
+        currentState: newState, 
+        metrics: updatedMetrics, 
+        clientMood, 
+        clientMoodReason,
+        moodLevel: moodLevel ?? returnedSessionState?.moodLevel,
+        lastMoodReason: moodReason || returnedSessionState?.lastMoodReason,
+      };
       setSessionState(newSessionState);
 
       const clientMessageObj = { type: 'client', text: clientMessage, timestamp: new Date() };
