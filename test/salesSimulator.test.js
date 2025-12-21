@@ -149,6 +149,99 @@ test('offer analyzer captures structure hit and metric deltas', async () => {
   assert.ok((analysis.metricDelta.openQuestions || 0) >= 1);
 });
 
+test('offer gate fails when fewer than 3 value statements', async () => {
+  const { generateClientReply, STATES, getInitialMetrics, getInitialOfferProgress, getInitialIntroFlags } =
+    await simulatorPromise;
+  const sessionState = {
+    difficulty: 'intermediate',
+    clientDiscType: 'D',
+    metrics: getInitialMetrics(),
+    introFlags: getInitialIntroFlags(),
+    offerProgress: getInitialOfferProgress(),
+  };
+
+  const response = generateClientReply(
+    STATES.PRESENTATION,
+    'Spomenuli ste, že vás brzdia procesy. Navrhujem automatizáciu, ušetrí vám to čas. Zníži to chyby v reporte. Ako to sedí na vašu situáciu?',
+    sessionState
+  );
+
+  assert.strictEqual(response.phaseGate.offer.passed, false);
+  assert.ok(response.phaseGate.offer.reasons.includes('need 3 value statements'));
+  assert.strictEqual(response.newState, STATES.PRESENTATION);
+});
+
+test('offer gate fails when missing reaction question', async () => {
+  const { generateClientReply, STATES, getInitialMetrics, getInitialOfferProgress, getInitialIntroFlags } =
+    await simulatorPromise;
+  const sessionState = {
+    difficulty: 'intermediate',
+    clientDiscType: 'I',
+    metrics: getInitialMetrics(),
+    introFlags: getInitialIntroFlags(),
+    offerProgress: getInitialOfferProgress(),
+  };
+
+  const response = generateClientReply(
+    STATES.PRESENTATION,
+    'Spomenuli ste manuálny reporting, ktorý vás trápi. Navrhujem automatizáciu, ušetrí vám čas. Zníži to chyby a pomôže dosiahnuť rýchlejšiu adaptáciu.',
+    sessionState
+  );
+
+  assert.strictEqual(response.phaseGate.offer.passed, false);
+  assert.ok(response.phaseGate.offer.reasons.includes('missing reaction question'));
+  assert.strictEqual(response.newState, STATES.PRESENTATION);
+});
+
+test('offer gate passes cumulatively and transitions to objections', async () => {
+  const { generateClientReply, STATES, getInitialMetrics, getInitialOfferProgress, getInitialIntroFlags } =
+    await simulatorPromise;
+  let currentState = STATES.PRESENTATION;
+  let metrics = getInitialMetrics();
+  let introFlags = getInitialIntroFlags();
+  let offerProgress = getInitialOfferProgress();
+  let phaseGate = {};
+
+  const first = generateClientReply(
+    currentState,
+    'Spomenuli ste problémy s onboardingom. Navrhujem modul na automatizáciu, ušetrí vám to čas.',
+    { metrics, introFlags, offerProgress, phaseGate }
+  );
+
+  currentState = first.newState;
+  metrics = first.updatedMetrics;
+  introFlags = first.introFlags;
+  offerProgress = first.offerProgress;
+  phaseGate = first.phaseGate;
+
+  const second = generateClientReply(
+    currentState,
+    'Zlepší to presnosť dát. Zníži chyby. Ako to na vás pôsobí?',
+    { metrics, introFlags, offerProgress, phaseGate }
+  );
+
+  assert.strictEqual(second.phaseGate.offer.passed, true);
+  assert.strictEqual(second.newState, STATES.OBJECTIONS);
+});
+
+test('offer gate blocks feature-only pitching pattern', async () => {
+  const { generateClientReply, STATES, getInitialMetrics, getInitialOfferProgress, getInitialIntroFlags } =
+    await simulatorPromise;
+  const response = generateClientReply(
+    STATES.PRESENTATION,
+    'Máme dashboard, integrácie a reporting pre pipeline. Funkcie zahŕňajú modul a automatizácie.',
+    {
+      metrics: getInitialMetrics(),
+      introFlags: getInitialIntroFlags(),
+      offerProgress: getInitialOfferProgress(),
+    }
+  );
+
+  assert.strictEqual(response.phaseGate.offer.passed, false);
+  assert.ok(response.phaseGate.offer.reasons.includes('feature-only pitching without benefits'));
+  assert.strictEqual(response.newState, STATES.PRESENTATION);
+});
+
 test('unified analyzer catches early pitch monologue and blocks gate', async () => {
   const { analyzeSalesMessage, isIntroGateSatisfied, getInitialMetrics, getInitialIntroFlags, STATES } = await simulatorPromise;
   const pitchText = 'Máme skvelý produkt a modul, ktorý vám pomôže. Toto je moja dlhá veta jedna. Toto je druhá. Toto je tretia. Toto je štvrtá. Toto je piata. Toto je šiesta.';

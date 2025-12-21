@@ -95,18 +95,29 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
     clientType: sessionState.clientType || 'new',
     introFlags: sessionState.introFlags || getInitialIntroFlags(),
     moodScore: sessionState.moodScore || 0,
+    offerProgress: sessionState.offerProgress || getInitialOfferProgress(),
+    phaseGate: sessionState.phaseGate || {},
     ...sessionState,
   };
   const { metrics, difficulty, clientDiscType } = normalizedSessionState;
 
   // 1. Analyze user's message and update metrics
-  const { metrics: updatedMetrics, introFlags: updatedIntroFlags } = analyzeSalesMessage(
+  const {
+    metrics: updatedMetrics,
+    introFlags: updatedIntroFlags,
+    offerProgress: updatedOfferProgress,
+    offerSignals,
+  } = analyzeSalesMessage(
     userMessage,
     metrics,
     currentState,
     normalizedSessionState
   );
-  const sessionWithIntro = { ...normalizedSessionState, introFlags: updatedIntroFlags };
+  const sessionWithIntro = {
+    ...normalizedSessionState,
+    introFlags: updatedIntroFlags,
+    offerProgress: updatedOfferProgress,
+  };
 
   // 1b. Update intro mood based on detected signals
   let introSignals = null;
@@ -122,7 +133,14 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
   }
 
   // 2. Determine the next state of the conversation
-  const nextState = getNextState(currentState, userMessage, updatedMetrics, sessionWithIntro);
+  const offerGate =
+    currentState === STATES.PRESENTATION
+      ? evaluateOfferGate(updatedOfferProgress, offerSignals)
+      : sessionWithIntro.phaseGate?.offer;
+  const nextState = getNextState(currentState, userMessage, updatedMetrics, {
+    ...sessionWithIntro,
+    phaseGate: { ...(sessionWithIntro.phaseGate || {}), offer: offerGate },
+  });
   const introGatePassed = currentState === STATES.INTRO && nextState === STATES.DISCOVERY;
 
   // 3. Generate the client's response based on the new state
@@ -155,6 +173,8 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
     shouldEnd: shouldEnd,
     moodScore: sessionWithIntro.introFlags._moodScore || normalizedSessionState.moodScore || 0,
     moodReasons,
+    offerProgress: updatedOfferProgress,
+    phaseGate: { ...(sessionWithIntro.phaseGate || {}), offer: offerGate },
   };
 };
 
@@ -212,6 +232,8 @@ function ensureSessionDefaults(sessionState = {}) {
     lastMoodReason: sessionState.lastMoodReason || 'Počiatočná nálada podľa profilu a obtiažnosti.',
     moodHistory: sessionState.moodHistory || [],
     lastIntroSignals: sessionState.lastIntroSignals || {},
+    offerProgress: sessionState.offerProgress || getInitialOfferProgress(),
+    phaseGate: sessionState.phaseGate || {},
     ...sessionState,
   };
 
@@ -418,6 +440,14 @@ export const getInitialIntroFlags = () => ({
   longMonologue: false,
 });
 
+export const getInitialOfferProgress = () => ({
+  offerValueStatementsTotal: 0,
+  offerReactionQuestionSeen: false,
+  offerBridgeSeen: false,
+  offerStructureSeen: false,
+  offerFeaturePitchTotal: 0,
+});
+
 export function detectSignalsIntro(text, sessionState) {
   const analysis = analyzeSalesmanTurn({ text, phase: 'intro', settings: sessionState, state: sessionState });
   const { signals, metricDelta, introFlagsDelta } = analysis;
@@ -450,13 +480,31 @@ export function isIntroGateSatisfied(sessionState) {
   return requiredSignals && metricsReady && !blocked;
 }
 
+export function evaluateOfferGate(progress = getInitialOfferProgress(), currentOfferSignals = {}) {
+  const reasons = [];
+
+  if (!progress.offerBridgeSeen) reasons.push('missing bridge');
+  if ((progress.offerValueStatementsTotal || 0) < 3) reasons.push('need 3 value statements');
+  if (!progress.offerReactionQuestionSeen) reasons.push('missing reaction question');
+  if (!progress.offerStructureSeen) reasons.push('missing structureHit');
+
+  const featureOnlyPitch =
+    (currentOfferSignals?.featurePitchCount || 0) >= 2 && (currentOfferSignals?.valueStatementsCount || 0) === 0;
+  if (featureOnlyPitch) {
+    reasons.push('feature-only pitching without benefits');
+  }
+
+  return { passed: reasons.length === 0, reasons };
+}
+
 /**
  * Analyzes the user's message to update performance metrics.
  */
 export function analyzeSalesMessage(message, currentMetrics, state, sessionState) {
     const introFlags = { ...(sessionState.introFlags || getInitialIntroFlags()) };
+    const offerProgress = { ...(sessionState.offerProgress || getInitialOfferProgress()) };
     if (!message) {
-      return { metrics: currentMetrics, introFlags };
+      return { metrics: currentMetrics, introFlags, offerProgress };
     }
 
     const newMetrics = { ...currentMetrics };
@@ -508,6 +556,17 @@ export function analyzeSalesMessage(message, currentMetrics, state, sessionState
         newMetrics.questionsAsked += analysis.metricDelta.questionsAsked || 0;
         newMetrics.openQuestions += analysis.metricDelta.openQuestions || 0;
         newMetrics.valueStatements += analysis.metricDelta.valueStatements || 0;
+        offerProgress.offerValueStatementsTotal =
+          (offerProgress.offerValueStatementsTotal || 0) + (analysis.phaseSignals.offer.valueStatementsCount || 0);
+        offerProgress.offerFeaturePitchTotal =
+          (offerProgress.offerFeaturePitchTotal || 0) + (analysis.phaseSignals.offer.featurePitchCount || 0);
+        offerProgress.offerReactionQuestionSeen =
+          offerProgress.offerReactionQuestionSeen || analysis.phaseSignals.offer.reactionQuestion || false;
+        offerProgress.offerBridgeSeen =
+          offerProgress.offerBridgeSeen || analysis.phaseSignals.offer.bridgedFromNeeds || false;
+        offerProgress.offerStructureSeen =
+          offerProgress.offerStructureSeen || analysis.phaseSignals.offer.structureHit || false;
+        offerProgress.lastOfferSignals = analysis.phaseSignals.offer;
     } else {
         // Questions
         const questionCount = (lowerMessage.match(/\?/g) || []).length;
@@ -562,7 +621,7 @@ export function analyzeSalesMessage(message, currentMetrics, state, sessionState
         }
     }
 
-    return { metrics: newMetrics, introFlags };
+    return { metrics: newMetrics, introFlags, offerProgress, offerSignals: offerProgress.lastOfferSignals };
 }
 
 // --- STATE MACHINE ---
@@ -579,8 +638,8 @@ function getNextState(currentState, userMessage, metrics, sessionState) {
         case STATES.DISCOVERY:
             return metrics.valueStatements > 0 || metrics.needsIdentified > 2 ? STATES.PRESENTATION : STATES.DISCOVERY;
         case STATES.PRESENTATION:
-            if (Math.random() < 0.4 && metrics.objectionHandlingAttempts === 0) return STATES.OBJECTIONS;
-            return metrics.closingAttempts > 0 ? STATES.CLOSING : STATES.PRESENTATION;
+            if (sessionState?.phaseGate?.offer?.passed) return STATES.OBJECTIONS;
+            return STATES.PRESENTATION;
         case STATES.OBJECTIONS:
             return metrics.closingAttempts > 0 ? STATES.CLOSING : STATES.PRESENTATION;
         case STATES.CLOSING:
@@ -797,6 +856,8 @@ export const evaluateMeeting = (messages, config) => {
     let tempMetrics = getInitialMetrics();
     let introFlags = getInitialIntroFlags();
     let moodScore = 0;
+    let offerProgress = getInitialOfferProgress();
+    let phaseGate = {};
     let currentState = STATES.INTRO;
 
     const salesmanMessages = messages.filter(m => m.type === 'salesman').map(m => m.text);
@@ -807,18 +868,33 @@ export const evaluateMeeting = (messages, config) => {
         industry: config.industry,
         clientType: config.clientCategory || 'new',
         metrics: tempMetrics,
+        offerProgress,
+        phaseGate,
     };
 
     for(const msg of salesmanMessages) {
-        const analysis = analyzeSalesMessage(msg, tempMetrics, currentState, { ...sessionState, introFlags, moodScore });
+        const analysis = analyzeSalesMessage(msg, tempMetrics, currentState, {
+          ...sessionState,
+          introFlags,
+          moodScore,
+          offerProgress,
+          phaseGate,
+        });
         tempMetrics = analysis.metrics;
         introFlags = analysis.introFlags;
+        offerProgress = analysis.offerProgress || offerProgress;
         moodScore = introFlags._moodScore || moodScore;
-        currentState = getNextState(currentState, msg, tempMetrics, { ...sessionState, introFlags });
+        const offerGate = currentState === STATES.PRESENTATION
+          ? evaluateOfferGate(offerProgress, analysis.offerSignals)
+          : phaseGate.offer;
+        phaseGate = { ...phaseGate, offer: offerGate };
+        currentState = getNextState(currentState, msg, tempMetrics, { ...sessionState, introFlags, offerProgress, phaseGate });
     }
     sessionState.metrics = tempMetrics;
     sessionState.introFlags = introFlags;
     sessionState.moodScore = moodScore;
+    sessionState.offerProgress = offerProgress;
+    sessionState.phaseGate = phaseGate;
     
     return buildFinalFeedback(sessionState);
 };
