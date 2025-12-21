@@ -486,6 +486,18 @@ export function analyzeSalesMessage(message, currentMetrics, state, sessionState
         const updatedMoodScore = updateMoodScore(sessionState.moodScore || 0, analysis.moodDelta.delta);
         introFlags._moodScore = updatedMoodScore;
         introFlags._moodReasons = analysis.moodDelta.reasons;
+    } else if (state === STATES.DISCOVERY) {
+        const analysis = analyzeSalesmanTurn({
+          text: message,
+          phase: 'needs',
+          settings: sessionState,
+          state: sessionState,
+        });
+
+        newMetrics.questionsAsked += analysis.metricDelta.questionsAsked || analysis.metricDelta.askedQuestions || 0;
+        newMetrics.openQuestions += analysis.metricDelta.openQuestions || 0;
+        newMetrics.needsIdentified += analysis.metricDelta.identifiedNeeds || 0;
+        newMetrics.adaptationToDISC += analysis.metricDelta.adaptationToDISC || analysis.metricDelta.discAdaptation || 0;
     } else {
         // Questions
         const questionCount = (lowerMessage.match(/\?/g) || []).length;
@@ -588,9 +600,14 @@ export function generateClientReplyForState(state, userMessage, sessionState, me
     switch (state) {
         case STATES.INTRO:
             let introBase = '';
+            const missingClientType = !sessionState.clientType;
             if (isNewClient) {
                 introBase = 'Dobrý deň, teší ma, že sa spoznávame. Rád si vypočujem, čo prinášate.';
                 reason = 'Nový kontakt, neutrálne predstavenie.';
+                if (missingClientType) {
+                  introBase = `${introBase} Aký je váš cieľ a aký postup vám vyhovuje?`;
+                  reason = 'Potrebujem jasný cieľ a postup, aby sme pokračovali.';
+                }
             } else {
                 introBase = `Som rád, že nadväzujeme na naše minulé rozhovory o ${industry || 'vašej firme'}. Poďme pokračovať.`;
                 reason = 'Pozná predchádzajúcu spoluprácu.';
