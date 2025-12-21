@@ -71,6 +71,19 @@ export const STATES = {
   FINISHED: 'finished',
 };
 
+const INTRO_MOOD_BY_DIFFICULTY = {
+  beginner: 3,
+  intermediate: 3,
+  expert: 2,
+};
+
+const DISC_MOOD_DEFAULT = {
+  D: 2,
+  I: 3,
+  S: 3,
+  C: 2,
+};
+
 // --- CORE LOGIC ---
 
 /**
@@ -95,18 +108,26 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
   );
   const sessionWithIntro = { ...normalizedSessionState, introFlags: updatedIntroFlags };
 
+  // 1b. Update intro mood based on detected signals
+  let introSignals = null;
+  if (currentState === STATES.INTRO) {
+    introSignals = userMessage ? extractIntroSignals(userMessage, normalizedSessionState) : null;
+    if (introSignals) {
+      const moodUpdate = updateMoodIntro(normalizedSessionState.moodLevel, introSignals, normalizedSessionState);
+      normalizedSessionState.moodLevel = moodUpdate.moodLevel;
+      normalizedSessionState.lastMoodReason = moodUpdate.reason;
+      normalizedSessionState.moodHistory = appendMoodHistory(normalizedSessionState, moodUpdate);
+      normalizedSessionState.lastIntroSignals = introSignals;
+    }
+  }
+
   // 2. Determine the next state of the conversation
   const nextState = getNextState(currentState, userMessage, updatedMetrics, sessionWithIntro);
   const introGatePassed = currentState === STATES.INTRO && nextState === STATES.DISCOVERY;
 
   // 3. Generate the client's response based on the new state
-  const clientReply = generateClientReplyForState(
-    nextState,
-    userMessage,
-    sessionWithIntro,
-    updatedMetrics,
-    { introGatePassed }
-  );
+  normalizedSessionState.metrics = updatedMetrics;
+  const clientReply = generateClientReplyForState(nextState, userMessage, normalizedSessionState, updatedMetrics);
 
   // 4. Style the response based on DISC profile
   const moodScore = sessionWithIntro.introFlags._moodScore ?? normalizedSessionState.moodScore ?? 0;
@@ -119,12 +140,16 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
   );
 
   const shouldEnd = nextState === STATES.FINISHED || (currentState === STATES.CLOSING && Math.random() < 0.5);
+  const phaseFeedback = currentState === STATES.INTRO && (nextState !== STATES.INTRO || (introSignals && introSignals.attemptToMoveOn))
+    ? generateIntroFeedback({ ...normalizedSessionState, metrics: updatedMetrics })
+    : undefined;
+  const moodReason = normalizedSessionState.lastMoodReason || styledReply.reason;
 
   return {
     newState: nextState,
     clientMessage: styledReply.message,
     clientMood: styledReply.mood,
-    clientMoodReason: styledReply.reason,
+    clientMoodReason: styledReply.reason || moodReason,
     updatedMetrics: updatedMetrics,
     introFlags: updatedIntroFlags,
     shouldEnd: shouldEnd,
@@ -167,6 +192,198 @@ function styleResponseByDISC(response, discType, clientType = 'new') {
   return { ...response, message };
 }
 
+
+
+function clampMood(level) {
+  return Math.max(1, Math.min(5, level));
+}
+
+export function getStartingMoodLevel(sessionState = {}) {
+  const base = INTRO_MOOD_BY_DIFFICULTY[sessionState.difficulty] ?? 3;
+  const discBias = DISC_MOOD_DEFAULT[sessionState.clientDiscType] ?? base;
+  return clampMood(sessionState.moodLevel ?? discBias ?? base);
+}
+
+function ensureSessionDefaults(sessionState = {}) {
+  const normalized = {
+    clientType: sessionState.clientType || 'new',
+    metrics: sessionState.metrics || getInitialMetrics(),
+    moodLevel: getStartingMoodLevel(sessionState),
+    lastMoodReason: sessionState.lastMoodReason || 'Počiatočná nálada podľa profilu a obtiažnosti.',
+    moodHistory: sessionState.moodHistory || [],
+    lastIntroSignals: sessionState.lastIntroSignals || {},
+    ...sessionState,
+  };
+
+  if (!normalized.metrics) {
+    normalized.metrics = getInitialMetrics();
+  }
+
+  normalized.moodLevel = clampMood(normalized.moodLevel);
+  return normalized;
+}
+
+function appendMoodHistory(sessionState, moodUpdate) {
+  if (!Array.isArray(sessionState.moodHistory)) return [];
+  const entry = {
+    level: moodUpdate.moodLevel,
+    reason: moodUpdate.reason,
+    at: new Date().toISOString(),
+    signals: moodUpdate.signals || {},
+  };
+  return [...sessionState.moodHistory, entry].slice(-10);
+}
+
+function detectDiscMismatch(sessionState, signals = {}, wordCount = 0, lowerMessage = '') {
+  const disc = sessionState.clientDiscType;
+  if (!disc) return false;
+
+  if ((disc === 'D' || disc === 'C') && signals.longMonologue) return true;
+  if (disc === 'I' && signals.brevity && !/(ďakujem|rád|teší|vitajte)/.test(lowerMessage)) return true;
+  if (disc === 'S' && (signals.pressureSignal || /tlak|urgent/.test(lowerMessage))) return true;
+  return false;
+}
+
+export function extractIntroSignals(message = '', sessionState = {}) {
+  const lower = (message || '').toLowerCase();
+  const words = lower.trim().split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+
+  const signals = {
+    goalAgendaConcise: /(cieľ|agenda|program|zámer)/.test(lower) && wordCount <= 60,
+    explainedQuestionPurpose: /(aby som (lepšie )?pochopil|chcem pochopiť|chcem vedieť prečo)/.test(lower),
+    openQuestion: /(\bako\b|\bčo\b|\bprečo\b|\bktor[ýaeé]\b|\bkde\b).*\?/.test(lower) || lower.trim().startsWith('ako'),
+    brevity: wordCount > 0 && wordCount <= 40,
+    longMonologue: wordCount > 80,
+    pitchTooEarly: /(ponuka|cena|zľav|zmluv|objednáv)/.test(lower) && wordCount < 80,
+    pressureSignal: /(ihneď|hneď|musíte|rýchlo|do konca dňa|urgentne|tlak)/.test(lower),
+    attemptToMoveOn: /(poďme ďalej|prejdime|môžeme prejsť|posuňme sa)/.test(lower),
+  };
+
+  signals.discMismatch = detectDiscMismatch(sessionState, signals, wordCount, lower);
+  return signals;
+}
+
+export function updateMoodIntro(prevMood, signals = {}, sessionState = {}) {
+  let delta = 0;
+  const positives = [];
+  const negatives = [];
+
+  if (signals.goalAgendaConcise || signals.explainedQuestionPurpose || signals.openQuestion) {
+    delta = 1;
+    if (signals.goalAgendaConcise) positives.push('jasný cieľ/agenda');
+    if (signals.explainedQuestionPurpose) positives.push('vysvetlený zámer otázky');
+    if (signals.openQuestion) positives.push('otvorená otázka');
+  }
+
+  if (signals.brevity && (sessionState.difficulty === 'expert' || ['D', 'C'].includes(sessionState.clientDiscType))) {
+    delta = 1;
+    positives.push('stručnosť');
+  }
+
+  if (signals.longMonologue || signals.pitchTooEarly || signals.pressureSignal || signals.discMismatch) {
+    delta = -1;
+    if (signals.longMonologue) negatives.push('príliš dlhý úvod');
+    if (signals.pitchTooEarly) negatives.push('príliš skorý pitch');
+    if (signals.pressureSignal) negatives.push('tlak/urgentnosť');
+    if (signals.discMismatch) negatives.push('nesúlad s DISC');
+  }
+
+  const moodLevel = clampMood(prevMood + delta);
+  const reasonParts = [];
+  if (positives.length) reasonParts.push(`+1 za ${positives.join(', ')}`);
+  if (negatives.length) reasonParts.push(`-1 za ${negatives.join(', ')}`);
+  if (!reasonParts.length) reasonParts.push('Bez zmeny nálady.');
+
+  return {
+    moodLevel,
+    reason: reasonParts.join('; '),
+    signals,
+  };
+}
+
+function mapMoodLevelToLabel(level) {
+  if (level >= 5) return 'positive';
+  if (level === 4) return 'interested';
+  if (level === 3) return 'neutral';
+  if (level === 2) return 'skeptical';
+  return 'negative';
+}
+
+function shortenIntroLine(message, maxWords = 18) {
+  const words = message.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return message;
+  return `${words.slice(0, maxWords).join(' ')}...`;
+}
+
+function applyMoodToIntroResponse(baseMessage, sessionState) {
+  const moodLevel = sessionState.moodLevel ?? 3;
+  const reason = sessionState.lastMoodReason || 'Reaguje podľa nálady v úvode.';
+  let message = baseMessage;
+
+  switch (moodLevel) {
+    case 5:
+      message = `${baseMessage} Pre kontext mi pomôže vedieť, čo chcete tento rok dosiahnuť. Aký výsledok by vás potešil?`;
+      break;
+    case 4:
+      message = `${baseMessage} Môžete pridať jeden konkrétny detail, aby sme vedeli, kde začať.`;
+      break;
+    case 3:
+      message = baseMessage;
+      break;
+    case 2:
+      message = `${shortenIntroLine(baseMessage)} Aký je cieľ tohto rozhovoru?`;
+      break;
+    default:
+      message = `Poďme k veci. ${shortenIntroLine(baseMessage, 8)}`;
+      break;
+  }
+
+  return {
+    message,
+    mood: mapMoodLevelToLabel(moodLevel),
+    reason,
+  };
+}
+
+export function generateIntroFeedback(sessionState = {}) {
+  const { metrics = {}, moodLevel = 3, lastIntroSignals = {}, clientType, clientDiscType } = sessionState;
+  const strengths = [];
+  const improvements = [];
+
+  if (lastIntroSignals.goalAgendaConcise) {
+    strengths.push('Stručne ste pomenovali cieľ a agendu.');
+  } else {
+    improvements.push('Hneď v úvode naznačte cieľ a čo chcete prebrať v jednej vete.');
+  }
+
+  if (lastIntroSignals.openQuestion || (metrics.openQuestions ?? 0) > 0) {
+    strengths.push('Použili ste otvorenú otázku na zmapovanie situácie.');
+  } else if (improvements.length < 2) {
+    improvements.push('Pridajte aspoň jednu otvorenú otázku, aby ste získali kontext.');
+  }
+
+  if ((metrics.questionsAsked ?? 0) === 0 && improvements.length < 2) {
+    improvements.push('Začnite otázkou namiesto dlhého monológu.');
+  }
+
+  const verdict = moodLevel >= 3 && strengths.length > 0 ? 'splnená' : 'nesplnená';
+  const recommendedLine = moodLevel <= 2
+    ? 'Spomaľte a vysvetlite, prečo sa pýtate – klient potrebuje vidieť cieľ rozhovoru.'
+    : 'Udržte otvorené otázky a pripomeňte spoločný cieľ.';
+
+  const discNote = clientType === 'repeat'
+    ? `Rešpektujte preferencie typu ${clientDiscType || 'klienta'} z predchádzajúcich hovorov.`
+    : undefined;
+
+  return {
+    verdict,
+    strengths: strengths.slice(0, 2),
+    improvements: improvements.slice(0, 2),
+    recommendedLine,
+    discNote,
+  };
+}
 
 /**
  * Selects a relevant objection based on difficulty.
@@ -370,25 +587,18 @@ export function generateClientReplyForState(state, userMessage, sessionState, me
 
     switch (state) {
         case STATES.INTRO:
-            if (!introFlags.hasGoal || !introFlags.hasAgenda) {
-                message = 'Aby som vám lepšie rozumel, aký je dnešný cieľ a čo by sme mali prejsť?';
-                reason = 'Potrebujem jasný cieľ a postup.';
-            } else if (introFlags.startedPitchTooEarly || introFlags.longMonologue) {
-                message = 'Skúsme začať otázkami o vašej situácii, aby som mohol reagovať presnejšie.';
-                reason = 'Potrebujem najprv viac otázok a kontextu.';
-            } else if (introFlags.hasGoal && introFlags.hasAgenda && introFlags.hasConsentSignal) {
-                message = 'Áno, je to v poriadku, poďme podľa vášho postupu.';
-                reason = 'Potvrdzuje súhlas s navrhnutým postupom.';
-            } else if (introFlags.hasOpenQuestion) {
-                message = 'Krátko: sme v raste a zaujíma ma, ako to viete podporiť, máme teraz nový tím.';
-                reason = 'Odpovedá stručne na otvorenú otázku s jedným detailom.';
-            } else if (isNewClient) {
-                message = 'Dobrý deň, teší ma, že sa spoznávame. Rád si vypočujem, čo prinášate.';
+            let introBase = '';
+            if (isNewClient) {
+                introBase = 'Dobrý deň, teší ma, že sa spoznávame. Rád si vypočujem, čo prinášate.';
                 reason = 'Nový kontakt, neutrálne predstavenie.';
             } else {
-                message = `Som rád, že nadväzujeme na naše minulé rozhovory o ${industry || 'vašej firme'}. Poďme pokračovať.`;
+                introBase = `Som rád, že nadväzujeme na naše minulé rozhovory o ${industry || 'vašej firme'}. Poďme pokračovať.`;
                 reason = 'Pozná predchádzajúcu spoluprácu.';
             }
+            const introResponse = applyMoodToIntroResponse(introBase, sessionState);
+            message = introResponse.message;
+            mood = introResponse.mood;
+            reason = [reason, sessionState.lastMoodReason || introResponse.reason].filter(Boolean).join(' ');
             break;
         case STATES.DISCOVERY:
             if (introGatePassed) {

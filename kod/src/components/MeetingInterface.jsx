@@ -5,7 +5,7 @@ import {
   Send, Mic, MicOff, User, Bot, PlayCircle, Search, Lightbulb, ThumbsDown, Award, Flag, CheckCircle, Volume2, BarChart2
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { generateClientReply, getInitialMetrics, getInitialIntroFlags } from '@/utils/salesSimulator';
+import { generateClientReply, getInitialMetrics, getStartingMoodLevel } from '@/utils/salesSimulator';
 import { cn } from '@/lib/utils';
 
 
@@ -126,7 +126,14 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     const initialReply = generateClientReply('intro', '', sessionState);
     const msgObj = { type: 'client', text: initialReply.clientMessage, timestamp: new Date() };
     setMessages([msgObj]);
-    setSessionState(s => ({ ...s, clientMood: initialReply.clientMood, clientMoodReason: initialReply.clientMoodReason }));
+    setSessionState((s) => ({
+      ...s,
+      ...initialReply.sessionState,
+      clientMood: initialReply.clientMood,
+      clientMoodReason: initialReply.clientMoodReason,
+      moodLevel: initialReply.moodLevel ?? initialReply.sessionState?.moodLevel ?? s.moodLevel,
+      lastMoodReason: initialReply.moodReason || initialReply.sessionState?.lastMoodReason || s.lastMoodReason,
+    }));
     speakText(initialReply.clientMessage);
     
     return () => window.speechSynthesis.cancel();
