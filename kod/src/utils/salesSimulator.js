@@ -145,12 +145,28 @@ export const generateClientReply = (currentState, userMessage, sessionState) => 
 
   // 3. Generate the client's response based on the new state
   normalizedSessionState.metrics = updatedMetrics;
-  const clientReply = generateClientReplyForState(nextState, userMessage, normalizedSessionState, updatedMetrics);
+  let clientReply = generateClientReplyForState(nextState, userMessage, normalizedSessionState, updatedMetrics);
 
   // 4. Style the response based on DISC profile
   const moodScore = sessionWithIntro.introFlags._moodScore ?? normalizedSessionState.moodScore ?? 0;
-  const moodReasons = sessionWithIntro.introFlags._moodReasons || [];
-  const derivedMood = currentState === STATES.INTRO ? deriveMoodFromScore(moodScore) : clientReply.mood;
+  let moodReasons = sessionWithIntro.introFlags._moodReasons || [];
+  let derivedMood = currentState === STATES.INTRO ? deriveMoodFromScore(moodScore) : clientReply.mood;
+  if (currentState === STATES.PRESENTATION && offerSignals) {
+    const baseMoodLevel = normalizedSessionState.moodLevel ?? getStartingMoodLevel(normalizedSessionState);
+    const offerMood = evaluateOfferMood(offerSignals, normalizedSessionState);
+    const updatedMoodLevel = clampMood(baseMoodLevel + offerMood.delta);
+    normalizedSessionState.moodLevel = updatedMoodLevel;
+    normalizedSessionState.lastMoodReason = offerMood.reasons.join('; ') || clientReply.reason;
+    normalizedSessionState.moodHistory = appendMoodHistory(normalizedSessionState, {
+      moodLevel: updatedMoodLevel,
+      reason: normalizedSessionState.lastMoodReason,
+      signals: { offer: offerSignals },
+    });
+    derivedMood = mapMoodLevelToLabel(updatedMoodLevel);
+    clientReply = { ...clientReply, mood: derivedMood, reason: normalizedSessionState.lastMoodReason };
+    moodReasons = offerMood.reasons;
+  }
+
   const styledReply = styleResponseByDISC(
     { ...clientReply, mood: derivedMood },
     clientDiscType,
@@ -215,7 +231,7 @@ function styleResponseByDISC(response, discType, clientType = 'new') {
 
 
 function clampMood(level) {
-  return Math.max(1, Math.min(5, level));
+  return Math.max(0, Math.min(5, level));
 }
 
 export function getStartingMoodLevel(sessionState = {}) {
@@ -322,6 +338,59 @@ export function updateMoodIntro(prevMood, signals = {}, sessionState = {}) {
     reason: reasonParts.join('; '),
     signals,
   };
+}
+
+function evaluateOfferMood(offerSignals = {}, sessionState = {}) {
+  const { difficulty = 'intermediate' } = sessionState;
+  const positives = [];
+  const negatives = [];
+
+  if (offerSignals.bridgedFromNeeds) positives.push('Ponuka nadväzuje na potreby klienta');
+  if ((offerSignals.valueStatementsCount || 0) >= 1) positives.push('Jasne komunikované prínosy');
+  if (offerSignals.reactionQuestion) positives.push('Obchodník dal priestor na reakciu');
+  if (offerSignals.structureHit) positives.push('Ponuka má jasnú štruktúru');
+
+  const featureOnlyPitch =
+    (offerSignals.valueStatementsCount || 0) === 0 && (offerSignals.featurePitchCount || 0) > 0;
+  const featureHeavy =
+    (offerSignals.featurePitchCount || 0) > (offerSignals.valueStatementsCount || 0);
+  const missingReaction = !offerSignals.reactionQuestion;
+  const missingBridge = offerSignals.bridgedFromNeeds === false;
+  const longOfferMonologue =
+    missingReaction &&
+    (offerSignals.valueStatementsCount || 0) + (offerSignals.featurePitchCount || 0) >= 3;
+
+  const shouldPenalizeFeaturePitch = difficulty !== 'beginner' || featureOnlyPitch;
+
+  if (featureHeavy && shouldPenalizeFeaturePitch) negatives.push('Ponuka je príliš funkčná bez prínosu');
+  if (featureOnlyPitch && shouldPenalizeFeaturePitch) negatives.push('Ponuka je príliš funkčná bez prínosu');
+  if (longOfferMonologue) negatives.push('Chýba otázka na reakciu');
+  if (missingBridge) negatives.push('Chýba prepojenie na potreby klienta');
+
+  const distinctNegatives = [...new Set(negatives)];
+  let delta = Math.min(2, positives.length) - Math.min(2, distinctNegatives.length);
+
+  if (difficulty === 'expert') {
+    const expertReasons = [];
+    if (!offerSignals.bridgedFromNeeds) expertReasons.push('Expert očakáva jasné prepojenie na potreby');
+    if (!offerSignals.reactionQuestion) expertReasons.push('Expert očakáva otázku na reakciu');
+    if (featureOnlyPitch) expertReasons.push('Expert odmieta čisto funkčný pitch');
+
+    const expertPenalty = Math.min(2, expertReasons.length);
+    if (expertPenalty > 0) {
+      delta -= expertPenalty;
+      distinctNegatives.push(...expertReasons.slice(0, expertPenalty));
+    }
+  }
+
+  delta = Math.max(-2, Math.min(2, delta));
+
+  const prioritizedNegatives =
+    difficulty === 'expert'
+      ? [...new Set([...distinctNegatives.filter((reason) => reason.startsWith('Expert')), ...distinctNegatives])]
+      : distinctNegatives;
+
+  return { delta, reasons: [...positives.slice(0, 2), ...prioritizedNegatives.slice(0, 2)] };
 }
 
 function mapMoodLevelToLabel(level) {

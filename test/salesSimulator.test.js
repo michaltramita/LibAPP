@@ -149,6 +149,82 @@ test('offer analyzer captures structure hit and metric deltas', async () => {
   assert.ok((analysis.metricDelta.openQuestions || 0) >= 1);
 });
 
+test('offer mood improves with bridge, value and reaction', async () => {
+  const { generateClientReply, STATES, getInitialMetrics, getInitialIntroFlags, getInitialOfferProgress } =
+    await simulatorPromise;
+  const response = generateClientReply(
+    STATES.PRESENTATION,
+    'Spomenuli ste chaos v procesoch, odporúčam automatizáciu onboardingov. Ušetrí vám to čas tímu a zníži chyby v reporte. Ako to na vás pôsobí?',
+    {
+      difficulty: 'intermediate',
+      clientDiscType: 'S',
+      metrics: getInitialMetrics(),
+      introFlags: getInitialIntroFlags(),
+      offerProgress: getInitialOfferProgress(),
+    }
+  );
+
+  assert.strictEqual(response.clientMood, 'positive');
+  assert.ok(response.moodReasons.some((reason) => reason.includes('nadväzuje na potreby')));
+});
+
+test('feature-only pitch during offer decreases mood', async () => {
+  const { generateClientReply, STATES, getInitialMetrics, getInitialIntroFlags, getInitialOfferProgress } =
+    await simulatorPromise;
+  const response = generateClientReply(
+    STATES.PRESENTATION,
+    'Máme dashboard, integrácie a reporting pre pipeline. Funkcie zahŕňajú modul a automatizácie.',
+    {
+      difficulty: 'intermediate',
+      clientDiscType: 'D',
+      metrics: getInitialMetrics(),
+      introFlags: getInitialIntroFlags(),
+      offerProgress: getInitialOfferProgress(),
+    }
+  );
+
+  assert.strictEqual(response.clientMood, 'negative');
+  assert.ok(response.moodReasons.some((reason) => reason.includes('funkčná')));
+});
+
+test('expert reacts silnejšie na generickú ponuku', async () => {
+  const { generateClientReply, STATES, getInitialMetrics, getInitialIntroFlags, getInitialOfferProgress } =
+    await simulatorPromise;
+  const response = generateClientReply(
+    STATES.PRESENTATION,
+    'Máme modul, licencie a integrácie. Môžeme nasadiť dashboard a reporting rýchlo.',
+    {
+      difficulty: 'expert',
+      clientDiscType: 'C',
+      metrics: getInitialMetrics(),
+      introFlags: getInitialIntroFlags(),
+      offerProgress: getInitialOfferProgress(),
+    }
+  );
+
+  assert.strictEqual(response.clientMood, 'negative');
+  assert.ok(response.moodReasons.some((reason) => reason.includes('Expert očakáva')));
+});
+
+test('offer mood evaluation does not run mimo prezentácie', async () => {
+  const { generateClientReply, STATES, getInitialMetrics, getInitialIntroFlags, getInitialOfferProgress } =
+    await simulatorPromise;
+  const response = generateClientReply(
+    STATES.DISCOVERY,
+    'Spomenuli ste chaos v procesoch, odporúčam automatizáciu onboardingov. Ušetrí vám to čas tímu a zníži chyby v reporte. Ako to na vás pôsobí?',
+    {
+      difficulty: 'intermediate',
+      clientDiscType: 'S',
+      metrics: getInitialMetrics(),
+      introFlags: getInitialIntroFlags(),
+      offerProgress: getInitialOfferProgress(),
+    }
+  );
+
+  assert.strictEqual(response.clientMood, 'interested');
+  assert.strictEqual(response.moodReasons.length, 0);
+});
+
 test('offer gate fails when fewer than 3 value statements', async () => {
   const { generateClientReply, STATES, getInitialMetrics, getInitialOfferProgress, getInitialIntroFlags } =
     await simulatorPromise;
