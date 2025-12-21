@@ -9,7 +9,9 @@ const PRODUCT_PHRASES = ['produkt', 'funkci', 'modul', 'ponuku', 'cena', 'licenc
 const VALUE_PHRASES = ['zlepšiť', 'ušetriť', 'benefit', 'výhoda', 'výsledok', 'hodnota'];
 
 const NEED_PHRASES = ['trápi', 'brzdí', 'problém', 'potrebujete', 'cieľ', 'nefunguje', 'chýba', 'naráža'];
-const IMPACT_PHRASES = ['dopad', 'čo to spôsobuje', 'koľko času', 'koľko stojí', 'riziko', 'chyby', 'dopad na tím', 'dopad na ľudí'];
+const BASE_IMPACT_PHRASES = ['dopad', 'čo to spôsobuje', 'koľko času', 'koľko stojí', 'riziko', 'chyby', 'dopad na tím', 'dopad na ľudí'];
+const POTREBY_IMPACT_PHRASES = ['aký dopad', 'aké dopady'];
+const IMPACT_PHRASES = [...new Set([...BASE_IMPACT_PHRASES, ...POTREBY_IMPACT_PHRASES])];
 const SUMMARY_PHRASES = ['ak to správne chápem', 'zhrniem', 'čiže', 'rozumiem tomu tak'];
 const CONFIRM_PHRASES = ['sedí to?', 'je to tak?', 'chápem správne?', 'súhlasí?'];
 const FOLLOW_UP_PHRASES = ['spomenuli ste', 'hovorili ste', 'vraveli ste', 'keď ste povedali', 'k tomu'];
