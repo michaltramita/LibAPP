@@ -89,6 +89,23 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
   const recognitionRef = useRef(null);
   const { toast } = useToast();
 
+  const mapBackendPhase = (phase) => {
+    if (!phase) return null;
+    const normalized = phase.toString().trim().toLowerCase();
+    const phaseMap = {
+      intro: 'intro',
+      discovery: 'discovery',
+      needs: 'discovery',
+      offer: 'presentation',
+      presentation: 'presentation',
+      objections: 'objections',
+      closing: 'closing',
+      done: 'finished',
+      finished: 'finished',
+    };
+    return phaseMap[normalized] || null;
+  };
+
   const phaseConfig = {
     intro: { label: 'Úvod', icon: PlayCircle },
     discovery: { label: 'Potreby', icon: Search },
@@ -98,6 +115,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
     finished: { label: 'Hotovo', icon: Flag }
   };
   const phases = Object.keys(phaseConfig);
+  const activePhaseIndex = Math.max(phases.indexOf(sessionState.currentState), 0);
 
   useEffect(() => {
     // Speech Recognition Setup
@@ -221,9 +239,17 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
         sessionState
       );
 
-      const responseState = data.state || data.stage || data.current_state || data.phase;
+      const backendPhase = data.state || data.stage || data.current_state || data.phase;
       const clientReplyText = data.client_message || data.reply || data.message || clientMessage;
-      const nextState = responseState || newState;
+
+      if (import.meta.env?.DEV) {
+        console.log('[phase]', backendPhase);
+      }
+
+      const nextState =
+        mapBackendPhase(backendPhase) ||
+        mapBackendPhase(newState) ||
+        sessionState.currentState;
       const newSessionState = {
         ...sessionState,
         currentState: nextState,
@@ -300,8 +326,8 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
             <div className="flex items-center gap-2 mb-6 z-10">
                 {phases.map((p, index) => {
                     const Icon = phaseConfig[p].icon;
-                    const isActive = phases.indexOf(sessionState.currentState) === index;
-                    const isPassed = phases.indexOf(sessionState.currentState) > index;
+                    const isActive = activePhaseIndex === index;
+                    const isPassed = activePhaseIndex > index;
                     return (
                         <div key={p} className={cn(
                             "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all cursor-default",
