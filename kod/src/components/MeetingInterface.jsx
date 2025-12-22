@@ -60,7 +60,7 @@ const MetricsDashboard = ({ metrics }) => {
 };
 
 
-const MeetingInterface = ({ config, onEndMeeting }) => {
+const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
   // Debugging log as requested
   console.log("sessionConfig received in MeetingInterface:", config);
 
@@ -82,6 +82,7 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [showMetrics, setShowMetrics] = useState(true);
 
   const messagesEndRef = useRef(null);
@@ -166,34 +167,93 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
     }
   };
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
+  const handleSendMessage = async () => {
+    const trimmed = inputValue.trim();
+    if (!trimmed || isSending || isTyping) return;
+    if (!sessionId) {
+      toast({ title: "Chýba relácia", description: "Relácia nie je k dispozícii. Skúste obnoviť stránku.", variant: "destructive" });
+      return;
+    }
 
-    const salesmanMessage = { type: 'salesman', text: inputValue, timestamp: new Date() };
+    const salesmanMessage = { type: 'salesman', text: trimmed, timestamp: new Date() };
     setMessages(prev => [...prev, salesmanMessage]);
     setInputValue('');
     setIsTyping(true);
+    setIsSending(true);
+    window.speechSynthesis.cancel();
 
-    setTimeout(() => {
-      const { newState, clientMessage, clientMood, clientMoodReason, updatedMetrics, introFlags, shouldEnd, moodScore, moodReasons } = generateClientReply(
+    if (import.meta.env?.DEV) {
+      console.log(`[sales-ui] POST /api/sales/message len=${trimmed.length}`);
+    }
+
+    try {
+      const response = await fetch('/api/sales/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          role: 'salesman',
+          content: trimmed,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      const {
+        newState,
+        clientMessage,
+        clientMood,
+        clientMoodReason,
+        updatedMetrics,
+        introFlags,
+        shouldEnd,
+        moodScore,
+        moodReasons,
+        offerProgress,
+        phaseGate,
+      } = generateClientReply(
         sessionState.currentState,
         salesmanMessage.text,
         sessionState
       );
-      
-      const newSessionState = { ...sessionState, currentState: newState, metrics: updatedMetrics, introFlags, clientMood, clientMoodReason, moodScore, moodReasons };
+
+      const responseState = data.state || data.stage || data.current_state || data.phase;
+      const clientReplyText = data.client_message || data.reply || data.message || clientMessage;
+      const nextState = responseState || newState;
+      const newSessionState = {
+        ...sessionState,
+        currentState: nextState,
+        metrics: updatedMetrics,
+        introFlags,
+        clientMood,
+        clientMoodReason,
+        moodScore,
+        moodReasons,
+        offerProgress: offerProgress ?? sessionState.offerProgress,
+        phaseGate: phaseGate ?? sessionState.phaseGate,
+      };
       setSessionState(newSessionState);
 
-      const clientMessageObj = { type: 'client', text: clientMessage, timestamp: new Date() };
+      const clientMessageObj = { type: 'client', text: clientReplyText, timestamp: new Date() };
       setMessages(prev => [...prev, clientMessageObj]);
       
       setIsTyping(false);
-      speakText(clientMessage);
+      speakText(clientReplyText);
 
-      if (shouldEnd) {
+      if (shouldEnd || nextState === 'finished') {
         setTimeout(() => handleEndMeeting(newSessionState), 2000);
       }
-    }, 1500 + Math.random() * 1000);
+    } catch (err) {
+      console.error('Failed to send sales message', err);
+      toast({ title: "Chyba", description: "Správu sa nepodarilo odoslať. Skúste to znova.", variant: "destructive" });
+    } finally {
+      setIsSending(false);
+      setIsTyping(false);
+    }
   };
 
   const handleEndMeeting = (finalState) => {
@@ -322,7 +382,7 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
                         <textarea
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
-                            onKeyPress={(e) => {
+                            onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                     e.preventDefault();
                                     handleSendMessage();
@@ -330,11 +390,11 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
                             }}
                             placeholder={isListening ? "Počúvam, hovorte..." : "Napíšte alebo nahrajte svoju odpoveď..."}
                             className="w-full pl-6 pr-28 py-4 bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none resize-none"
-                            disabled={isTyping}
+                            disabled={isTyping || isSending}
                             rows={1}
                         />
                         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                             <Button
+                            <Button
                                 onClick={toggleListening}
                                 variant="ghost"
                                 size="icon"
@@ -344,7 +404,7 @@ const MeetingInterface = ({ config, onEndMeeting }) => {
                             </Button>
                             <Button
                                 onClick={handleSendMessage}
-                                disabled={!inputValue.trim() || isTyping}
+                                disabled={!inputValue.trim() || isTyping || isSending}
                                 size="icon"
                                 className="rounded-full w-10 h-10 bg-slate-800 hover:bg-slate-900 text-white shadow"
                             >
