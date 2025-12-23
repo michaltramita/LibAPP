@@ -60,7 +60,7 @@ const MetricsDashboard = ({ metrics }) => {
 };
 
 
-const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
+const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
   // Debugging log as requested
   console.log("sessionConfig received in MeetingInterface:", config);
 
@@ -84,10 +84,16 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
   const [isListening, setIsListening] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showMetrics, setShowMetrics] = useState(true);
+  const [voiceSessionId, setVoiceSessionId] = useState(null);
+  const [creatingVoiceSession, setCreatingVoiceSession] = useState(false);
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
   const { toast } = useToast();
+
+  const clientType = config?.clientType || 'new';
+  const clientDiscType = config?.clientDiscType || null;
+  const difficulty = config?.difficulty || 'beginner';
 
   const mapBackendPhase = (phase) => {
     if (!phase) return null;
@@ -160,6 +166,68 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const ensureVoiceSession = async () => {
+      if (!sessionId || creatingVoiceSession || voiceSessionId) return;
+      setCreatingVoiceSession(true);
+
+      try {
+        const response = await fetch('/api/sales/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_id: userId,
+            module: 'obchodny_rozhovor',
+            difficulty,
+            client_type: clientType,
+            client_disc_type: clientDiscType,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data?.session_id && isMounted) {
+          setVoiceSessionId(data.session_id);
+        } else {
+          throw new Error('Missing session_id in response');
+        }
+      } catch (err) {
+        console.error('Failed to initialize sales session', err);
+        if (isMounted) {
+          toast({
+            title: "Chyba relácie",
+            description: "Nepodarilo sa pripraviť simuláciu. Skúste obnoviť stránku.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setCreatingVoiceSession(false);
+        }
+      }
+    };
+
+    ensureVoiceSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    sessionId,
+    userId,
+    clientType,
+    clientDiscType,
+    difficulty,
+    voiceSessionId,
+    creatingVoiceSession,
+  ]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
@@ -188,7 +256,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
   const handleSendMessage = async () => {
     const trimmed = inputValue.trim();
     if (!trimmed || isSending || isTyping) return;
-    if (!sessionId) {
+    if (!voiceSessionId) {
       toast({ title: "Chýba relácia", description: "Relácia nie je k dispozícii. Skúste obnoviť stránku.", variant: "destructive" });
       return;
     }
@@ -209,7 +277,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: sessionId,
+          session_id: voiceSessionId,
           role: 'salesman',
           content: trimmed,
         }),
@@ -430,9 +498,9 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
                             </Button>
                             <Button
                                 onClick={handleSendMessage}
-                                disabled={!inputValue.trim() || isTyping || isSending}
                                 size="icon"
                                 className="rounded-full w-10 h-10 bg-slate-800 hover:bg-slate-900 text-white shadow"
+                                disabled={!voiceSessionId || creatingVoiceSession || !inputValue.trim() || isTyping || isSending}
                             >
                                 <Send className="w-5 h-5" />
                             </Button>
