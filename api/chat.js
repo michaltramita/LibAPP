@@ -5,7 +5,14 @@ const { rateLimit } = require('./lib/rateLimit');
 
 const sensitivePattern = /(rodn[eé] [čc]íslo|social security|iban|adresa)/i;
 const MAX_MESSAGE_LENGTH = 2000;
+const MAX_METADATA_BYTES = 2 * 1024;
+const MAX_SESSION_ID_LENGTH = 128;
 const ALLOWED_LOCALES = new Set(['sk', 'en']);
+const CHAT_RATE_LIMITS = {
+  unauth: { limit: 10, windowMs: 60_000 },
+  auth: { limit: 60, windowMs: 60_000 },
+  authIp: { limit: 120, windowMs: 60_000 },
+};
 
 module.exports = async function handler(req, res) {
   const pathname = (req.url || '').split('?')[0];
@@ -24,20 +31,32 @@ async function handleChat(req, res) {
   }
 
   const ip = getClientIp(req);
-  const rate = rateLimit({ key: `chat:${ip}`, limit: 20, windowMs: 60_000 });
-  if (!rate.allowed) {
-    res.status(429).json({ error: 'rate_limited' });
-    return;
-  }
+  const authContext = await getAuthContext(req);
 
   const body = getJsonBody(req, res);
-  if (!body) return;
+  if (!body) {
+    logChatRequest({ isAuth: !!authContext, messageLength: 0, rateLimited: false });
+    return;
+  }
 
   const message = typeof body.message === 'string' ? body.message.trim() : '';
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : undefined;
   const localeRaw = typeof body.locale === 'string' ? body.locale.trim() : 'sk';
   const locale = ALLOWED_LOCALES.has(localeRaw) ? localeRaw : 'sk';
-  const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {};
+  const metadata = sanitizeMetadata(body.metadata);
+  const rate = applyChatRateLimit({ ip, userId: authContext?.userId });
+  const rateLimited = !rate.allowed;
+
+  logChatRequest({
+    isAuth: !!authContext,
+    messageLength: message.length,
+    rateLimited,
+  });
+
+  if (rateLimited) {
+    respondRateLimited(res);
+    return;
+  }
 
   if (!message) {
     res.status(400).json({ error: 'missing_message' });
@@ -49,12 +68,10 @@ async function handleChat(req, res) {
     return;
   }
 
-  if (sessionId && sessionId.length > 128) {
+  if (sessionId && sessionId.length > MAX_SESSION_ID_LENGTH) {
     res.status(400).json({ error: 'invalid_session_id' });
     return;
   }
-
-  logTelemetry({ sessionId, locale, metadata });
 
   if (sensitivePattern.test(message)) {
     res.writeHead(200, {
@@ -137,10 +154,73 @@ function formatEvent(event, data) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-function logTelemetry(payload) {
-  const minimal = {
-    ...payload,
-    timestamp: new Date().toISOString(),
-  };
-  console.log('[libo-telemetry]', JSON.stringify(minimal));
+function respondRateLimited(res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  res.write(formatEvent('final', {
+    content: 'Rate limit exceeded. Try again later.',
+  }));
+  res.end();
+}
+
+function logChatRequest({ isAuth, messageLength, rateLimited }) {
+  if (process.env.NODE_ENV !== 'development') return;
+  console.log('[libo-chat]', JSON.stringify({
+    auth: isAuth,
+    messageLength,
+    rateLimited,
+  }));
+}
+
+async function getAuthContext(req) {
+  const authHeader = req.headers?.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (!token) return null;
+  const { createUserSupabaseClient } = require('./lib/supabaseClient');
+  const supabase = createUserSupabaseClient(token);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userId = authData?.user?.id;
+  if (authError || !userId) return null;
+  return { userId };
+}
+
+function applyChatRateLimit({ ip, userId }) {
+  if (userId) {
+    const userRate = rateLimit({ key: `chat:user:${userId}`, ...CHAT_RATE_LIMITS.auth });
+    const ipRate = rateLimit({ key: `chat:ip:${ip}`, ...CHAT_RATE_LIMITS.authIp });
+    return { allowed: userRate.allowed && ipRate.allowed };
+  }
+  const ipRate = rateLimit({ key: `chat:ip:${ip}`, ...CHAT_RATE_LIMITS.unauth });
+  return { allowed: ipRate.allowed };
+}
+
+function sanitizeMetadata(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const sanitized = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!key || typeof key !== 'string') continue;
+    if (isPrimitive(value)) {
+      sanitized[key] = value;
+    }
+  }
+  return enforceMetadataLimit(sanitized);
+}
+
+function enforceMetadataLimit(metadata) {
+  const limited = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    limited[key] = value;
+    if (JSON.stringify(limited).length > MAX_METADATA_BYTES) {
+      delete limited[key];
+      break;
+    }
+  }
+  return limited;
+}
+
+function isPrimitive(value) {
+  return value == null || ['string', 'number', 'boolean'].includes(typeof value);
 }
