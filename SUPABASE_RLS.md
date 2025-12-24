@@ -2,6 +2,10 @@
 
 Apply these policies to align with user-scoped access for sales sessions and messages.
 
+**Ownership column note:** The API writes the session owner to `user_id` by default. If your
+`sales_voice_sessions` table uses a different ownership column, update the policies below and
+set `SALES_SESSION_OWNER_COLUMN` in the API environment to that exact column name.
+
 ```sql
 -- Sessions table
 alter table sales_voice_sessions enable row level security;
