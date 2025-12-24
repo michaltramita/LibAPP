@@ -168,7 +168,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   useEffect(() => {
     let isMounted = true;
 
-    const ensureVoiceSession = async () => {
+    const initializeSalesSession = async () => {
       if (!sessionId || creatingVoiceSession || voiceSessionId) return;
       if (!accessToken) {
         toast({
@@ -196,16 +196,22 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
           }),
         });
 
+        const data = await response.json().catch(() => null);
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+          throw new Error(
+            data?.details || data?.error || response.statusText || `HTTP ${response.status}`
+          );
         }
 
-        const data = await response.json();
-        if (data?.session_id && isMounted) {
-          setVoiceSessionId(data.session_id);
-        } else {
+        const newVoiceSessionId = data?.session_id ?? data?.sessionId ?? data?.id;
+        if (!newVoiceSessionId) {
+          if (import.meta.env?.DEV) {
+            console.debug('Missing session_id in response', data);
+          }
           throw new Error('Missing session_id in response');
         }
+
+        return newVoiceSessionId;
       } catch (err) {
         console.error('Failed to initialize sales session', err);
         if (isMounted) {
@@ -215,10 +221,18 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             variant: "destructive",
           });
         }
+        return undefined;
       } finally {
         if (isMounted) {
           setCreatingVoiceSession(false);
         }
+      }
+    };
+
+    const ensureVoiceSession = async () => {
+      const newVoiceSessionId = await initializeSalesSession();
+      if (newVoiceSessionId && isMounted) {
+        setVoiceSessionId(newVoiceSessionId);
       }
     };
 
