@@ -8,7 +8,7 @@ const ALLOWED_DIFFICULTIES = new Set(['beginner', 'advanced', 'expert']);
 const ALLOWED_CLIENT_TYPES = new Set(['new', 'repeat']);
 const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
 const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
-const SESSION_OWNER_COLUMN = process.env.SALES_SESSION_OWNER_COLUMN || 'user_id';
+const SESSION_OWNER_COLUMN = 'user_id';
 let missingSupabaseEnvLogged = false;
 
 module.exports = async function handler(req, res) {
@@ -186,9 +186,9 @@ async function handleSession(req, res) {
     if (requestedSessionId) {
       const { data: existingSessions, error: existingSessionError } = await supabase
         .from('sales_voice_sessions')
-        .select(`id,${SESSION_OWNER_COLUMN}`)
+        .select('id,user_id')
         .eq('id', requestedSessionId)
-        .eq(SESSION_OWNER_COLUMN, userId)
+        .eq('user_id', userId)
         .limit(1);
 
       if (existingSessionError) {
@@ -220,7 +220,7 @@ async function handleSession(req, res) {
       difficulty,
       client_type: clientType,
       client_disc_type: clientDiscType,
-      [SESSION_OWNER_COLUMN]: userId,
+      user_id: userId,
     };
 
     if (requestedSessionId) {
@@ -305,9 +305,9 @@ async function handleMessage(req, res) {
 
     const { data: existingSessions, error: sessionQueryError } = await supabase
       .from('sales_voice_sessions')
-      .select(`id,${SESSION_OWNER_COLUMN}`)
+      .select('id,user_id')
       .eq('id', sessionIdValue)
-      .eq(SESSION_OWNER_COLUMN, userId)
+      .eq('user_id', userId)
       .limit(1);
 
     if (sessionQueryError) {
@@ -405,7 +405,7 @@ async function handleGetSession(req, res, sessionId) {
       .from('sales_voice_sessions')
       .select('*')
       .eq('id', sessionId)
-      .eq(SESSION_OWNER_COLUMN, userId)
+      .eq('user_id', userId)
       .single();
 
     if (sessionError) {
