@@ -60,7 +60,7 @@ const MetricsDashboard = ({ metrics }) => {
 };
 
 
-const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
+const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   // Debugging log as requested
   console.log("sessionConfig received in MeetingInterface:", config);
 
@@ -170,15 +170,25 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
 
     const ensureVoiceSession = async () => {
       if (!sessionId || creatingVoiceSession || voiceSessionId) return;
+      if (!accessToken) {
+        toast({
+          title: "Prihlásenie vypršalo",
+          description: "Prihláste sa znova a skúste to ešte raz.",
+          variant: "destructive",
+        });
+        return;
+      }
       setCreatingVoiceSession(true);
 
       try {
         const response = await fetch('/api/sales/session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: JSON.stringify({
             session_id: sessionId,
-            user_id: userId,
             module: 'obchodny_rozhovor',
             difficulty,
             client_type: clientType,
@@ -219,12 +229,12 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
     };
   }, [
     sessionId,
-    userId,
     clientType,
     clientDiscType,
     difficulty,
     voiceSessionId,
     creatingVoiceSession,
+    accessToken,
   ]);
 
   useEffect(() => {
@@ -260,6 +270,14 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
       toast({ title: "Chýba relácia", description: "Relácia nie je k dispozícii. Skúste obnoviť stránku.", variant: "destructive" });
       return;
     }
+    if (!accessToken) {
+      toast({
+        title: "Prihlásenie vypršalo",
+        description: "Prihláste sa znova a skúste to ešte raz.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const salesmanMessage = { type: 'salesman', text: trimmed, timestamp: new Date() };
     setMessages(prev => [...prev, salesmanMessage]);
@@ -275,7 +293,10 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
     try {
       const response = await fetch('/api/sales/message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
           session_id: voiceSessionId,
           role: 'salesman',

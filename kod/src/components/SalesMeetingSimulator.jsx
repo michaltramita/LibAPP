@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { buildFinalFeedback } from '@/utils/salesSimulator'; // Import the main feedback builder
 
 const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [sessionData, setSessionData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -132,7 +132,7 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
       config={sessionConfig}
       onEndMeeting={handleEndSession}
       sessionId={sessionId}
-      userId={user?.id}
+      accessToken={session?.access_token}
     />
   );
 };

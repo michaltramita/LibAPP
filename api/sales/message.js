@@ -7,7 +7,7 @@ const MAX_ID_LENGTH = 128;
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
 
   if (req.method === 'OPTIONS') {
@@ -66,9 +66,24 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    if (!token) {
+      res.status(401).json({ ok: false, error: 'unauthorized' });
+      return;
+    }
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const userId = authData?.user?.id;
+
+    if (authError || !userId) {
+      res.status(401).json({ ok: false, error: 'unauthorized' });
+      return;
+    }
+
     const { data: existingSessions, error: sessionQueryError } = await supabaseAdmin
       .from('sales_voice_sessions')
-      .select('id')
+      .select('id,user_id')
       .eq('id', sessionIdValue)
       .limit(1);
 
@@ -82,6 +97,29 @@ module.exports = async function handler(req, res) {
       console.warn(`[sales] message rejected: session_not_found ${sessionIdValue}`);
       res.status(404).json({ ok: false, error: 'session_not_found' });
       return;
+    }
+
+    const session = existingSessions[0];
+    if (session.user_id && session.user_id !== userId) {
+      res.status(403).json({ ok: false, error: 'forbidden' });
+      return;
+    }
+
+    if (!session.user_id) {
+      const { error: ownershipError } = await supabaseAdmin
+        .from('sales_voice_sessions')
+        .update({ user_id: userId })
+        .eq('id', session.id);
+
+      if (ownershipError) {
+        console.error('[sales-api] failed to claim session ownership', ownershipError);
+        res.status(500).json({ ok: false, error: 'supabase_update_failed' });
+        return;
+      }
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[sales-api] message user=${userId.slice(0, 8)} session=${session.id}`);
     }
 
     const { error: messageError } = await supabaseAdmin
