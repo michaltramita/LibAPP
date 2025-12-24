@@ -238,7 +238,7 @@ async function handleSession(req, res) {
       return;
     }
 
-    const sessionId = Array.isArray(sessionData) ? sessionData[0]?.id : sessionData?.id;
+    const sessionId = resolveSessionId(sessionData, requestedSessionId);
 
     if (!sessionId) {
       console.error('[sales-api] session created but missing id', { sessionData });
@@ -255,6 +255,18 @@ async function handleSession(req, res) {
     console.error('[sales-api] session handler error', err);
     res.status(500).json({ ok: false, error: 'Internal server error' });
   }
+}
+
+function resolveSessionId(sessionData, requestedSessionId) {
+  if (Array.isArray(sessionData)) {
+    return sessionData[0]?.id || requestedSessionId || null;
+  }
+
+  if (sessionData && typeof sessionData === 'object') {
+    return sessionData.id || requestedSessionId || null;
+  }
+
+  return requestedSessionId || null;
 }
 
 async function handleMessage(req, res) {
