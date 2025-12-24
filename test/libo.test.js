@@ -119,3 +119,119 @@ test('chat handler closes SSE stream on final', async () => {
   assert.strictEqual(finalEvents.length, 1, 'final event written once');
   assert.strictEqual(endCount, 1, 'res.end called once');
 });
+
+test('chat handler validates empty message', async () => {
+  delete require.cache[require.resolve('../api/chat')];
+  const handler = require('../api/chat');
+
+  let statusCode = null;
+  let jsonBody = null;
+  const req = { method: 'POST', body: { message: '   ' }, socket: { remoteAddress: '1.1.1.1' } };
+  const res = {
+    status: (code) => {
+      statusCode = code;
+      return res;
+    },
+    json: (payload) => {
+      jsonBody = payload;
+    },
+  };
+
+  await handler(req, res);
+
+  assert.strictEqual(statusCode, 400);
+  assert.deepStrictEqual(jsonBody, { error: 'missing_message' });
+});
+
+test('chat handler rejects oversized message', async () => {
+  delete require.cache[require.resolve('../api/chat')];
+  const handler = require('../api/chat');
+
+  const longMessage = 'a'.repeat(2001);
+  let statusCode = null;
+  let jsonBody = null;
+  const req = { method: 'POST', body: { message: longMessage }, socket: { remoteAddress: '2.2.2.2' } };
+  const res = {
+    status: (code) => {
+      statusCode = code;
+      return res;
+    },
+    json: (payload) => {
+      jsonBody = payload;
+    },
+  };
+
+  await handler(req, res);
+
+  assert.strictEqual(statusCode, 400);
+  assert.deepStrictEqual(jsonBody, { error: 'message_too_long' });
+});
+
+test('chat handler rejects invalid session id', async () => {
+  delete require.cache[require.resolve('../api/chat')];
+  const handler = require('../api/chat');
+
+  let statusCode = null;
+  let jsonBody = null;
+  const req = {
+    method: 'POST',
+    body: { message: 'hello', sessionId: 'a'.repeat(129) },
+    socket: { remoteAddress: '3.3.3.3' },
+  };
+  const res = {
+    status: (code) => {
+      statusCode = code;
+      return res;
+    },
+    json: (payload) => {
+      jsonBody = payload;
+    },
+  };
+
+  await handler(req, res);
+
+  assert.strictEqual(statusCode, 400);
+  assert.deepStrictEqual(jsonBody, { error: 'invalid_session_id' });
+});
+
+test('chat handler rate limits unauthenticated requests', async () => {
+  const mockLLM = {
+    systemPrompt: '',
+    streamChat: async function* () {
+      yield { type: 'final', content: 'ok' };
+    },
+  };
+
+  const llmModulePath = require.resolve('../api/lib/llmClient');
+  delete require.cache[llmModulePath];
+  require.cache[llmModulePath] = {
+    exports: { createLLMClient: () => mockLLM },
+  };
+
+  delete require.cache[require.resolve('../api/chat')];
+  const handler = require('../api/chat');
+
+  const reqBase = {
+    method: 'POST',
+    body: { message: 'hello' },
+    socket: { remoteAddress: '4.4.4.4' },
+  };
+
+  let rateLimitedWrites = [];
+  const buildRes = () => ({
+    writeHead: () => {},
+    write: (chunk) => rateLimitedWrites.push(chunk),
+    end: () => {},
+    status: () => ({ json: () => {} }),
+    json: () => {},
+  });
+
+  for (let i = 0; i < 11; i += 1) {
+    rateLimitedWrites = [];
+    await handler(reqBase, buildRes());
+  }
+
+  const finalEvents = rateLimitedWrites.filter((w) => w.includes('event: final'));
+  assert.strictEqual(finalEvents.length, 1);
+  assert.ok(finalEvents[0].includes('Rate limit'));
+});
