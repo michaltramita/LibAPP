@@ -1,4 +1,4 @@
-const { supabaseAdmin } = require('./lib/supabaseAdmin');
+const { createUserSupabaseClient } = require('./lib/supabaseClient');
 const { getJsonBody, getClientIp } = require('./lib/requestUtils');
 const { rateLimit } = require('./lib/rateLimit');
 
@@ -10,21 +10,30 @@ const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
 const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  setCorsHeaders(req, res);
 
   const pathname = (req.url || '').split('?')[0];
   const isSessionRoute = pathname.endsWith('/sales/session');
+  const sessionDetailMatch = pathname.match(/\/sales\/session\/([^/]+)$/);
   const isMessageRoute = pathname.endsWith('/sales/message');
 
-  if (!isSessionRoute && !isMessageRoute) {
+  if (!isSessionRoute && !isMessageRoute && !sessionDetailMatch) {
     res.status(404).json({ error: 'Not found' });
     return;
   }
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
+    return;
+  }
+
+  if (req.method === 'GET') {
+    if (!sessionDetailMatch) {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    await handleGetSession(req, res, sessionDetailMatch[1]);
     return;
   }
 
@@ -40,6 +49,47 @@ module.exports = async function handler(req, res) {
 
   await handleMessage(req, res);
 };
+
+function setCorsHeaders(req, res) {
+  const origin = resolveAllowedOrigin(req);
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+}
+
+function resolveAllowedOrigin(req) {
+  if (process.env.APP_ORIGIN) {
+    return process.env.APP_ORIGIN;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  // TODO: set APP_ORIGIN in production to avoid wildcard CORS.
+  return req.headers.origin || '*';
+}
+
+async function getAuthenticatedClient(req, res) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+
+  if (!token) {
+    res.status(401).json({ error: 'unauthorized' });
+    return null;
+  }
+
+  const supabase = createUserSupabaseClient(token);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const userId = authData?.user?.id;
+
+  if (authError || !userId) {
+    res.status(401).json({ error: 'unauthorized' });
+    return null;
+  }
+
+  return { supabase, userId };
+}
 
 async function handleSession(req, res) {
   const ip = getClientIp(req);
@@ -69,26 +119,16 @@ async function handleSession(req, res) {
       : 'obchodny_rozhovor';
 
   try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-    if (!token) {
-      res.status(401).json({ ok: false, error: 'unauthorized' });
-      return;
-    }
-
-    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
-    const userId = authData?.user?.id;
-
-    if (authError || !userId) {
-      res.status(401).json({ ok: false, error: 'unauthorized' });
-      return;
-    }
+    const authContext = await getAuthenticatedClient(req, res);
+    if (!authContext) return;
+    const { supabase, userId } = authContext;
 
     if (requestedSessionId) {
-      const { data: existingSessions, error: existingSessionError } = await supabaseAdmin
+      const { data: existingSessions, error: existingSessionError } = await supabase
         .from('sales_voice_sessions')
         .select('id,user_id')
         .eq('id', requestedSessionId)
+        .eq('user_id', userId)
         .limit(1);
 
       if (existingSessionError) {
@@ -99,23 +139,6 @@ async function handleSession(req, res) {
 
       if (existingSessions && existingSessions.length) {
         const existingSession = existingSessions[0];
-        if (existingSession.user_id && existingSession.user_id !== userId) {
-          res.status(403).json({ ok: false, error: 'forbidden' });
-          return;
-        }
-
-        if (!existingSession.user_id) {
-          const { error: ownershipError } = await supabaseAdmin
-            .from('sales_voice_sessions')
-            .update({ user_id: userId })
-            .eq('id', existingSession.id);
-
-          if (ownershipError) {
-            console.error('[sales-api] failed to claim session ownership', ownershipError);
-            res.status(500).json({ ok: false, error: 'supabase_update_failed' });
-            return;
-          }
-        }
 
         if (process.env.NODE_ENV !== 'production') {
           console.log(
@@ -141,13 +164,17 @@ async function handleSession(req, res) {
 
     sessionInput.user_id = userId;
 
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
+    const { data: sessionData, error: sessionError } = await supabase
       .from('sales_voice_sessions')
       .insert([sessionInput])
       .select('id')
       .single();
 
     if (sessionError) {
+      if (sessionError.code === '23505') {
+        res.status(404).json({ ok: false, error: 'session_not_found' });
+        return;
+      }
       console.error('[sales-api] failed to insert session', sessionError);
       res.status(500).json({ ok: false, error: 'supabase_insert_failed' });
       return;
@@ -213,25 +240,15 @@ async function handleMessage(req, res) {
   }
 
   try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-    if (!token) {
-      res.status(401).json({ ok: false, error: 'unauthorized' });
-      return;
-    }
+    const authContext = await getAuthenticatedClient(req, res);
+    if (!authContext) return;
+    const { supabase, userId } = authContext;
 
-    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
-    const userId = authData?.user?.id;
-
-    if (authError || !userId) {
-      res.status(401).json({ ok: false, error: 'unauthorized' });
-      return;
-    }
-
-    const { data: existingSessions, error: sessionQueryError } = await supabaseAdmin
+    const { data: existingSessions, error: sessionQueryError } = await supabase
       .from('sales_voice_sessions')
       .select('id,user_id')
       .eq('id', sessionIdValue)
+      .eq('user_id', userId)
       .limit(1);
 
     if (sessionQueryError) {
@@ -247,29 +264,12 @@ async function handleMessage(req, res) {
     }
 
     const session = existingSessions[0];
-    if (session.user_id && session.user_id !== userId) {
-      res.status(403).json({ ok: false, error: 'forbidden' });
-      return;
-    }
-
-    if (!session.user_id) {
-      const { error: ownershipError } = await supabaseAdmin
-        .from('sales_voice_sessions')
-        .update({ user_id: userId })
-        .eq('id', session.id);
-
-      if (ownershipError) {
-        console.error('[sales-api] failed to claim session ownership', ownershipError);
-        res.status(500).json({ ok: false, error: 'supabase_update_failed' });
-        return;
-      }
-    }
 
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[sales-api] message user=${userId.slice(0, 8)} session=${session.id}`);
     }
 
-    const { error: messageError } = await supabaseAdmin
+    const { error: messageError } = await supabase
       .from('sales_voice_messages')
       .insert([{ session_id: sessionIdValue, role: roleValue, content: contentValue }]);
 
@@ -279,7 +279,7 @@ async function handleMessage(req, res) {
       return;
     }
 
-    const { error: salesmanCountError, count: salesmanCount } = await supabaseAdmin
+    const { error: salesmanCountError, count: salesmanCount } = await supabase
       .from('sales_voice_messages')
       .select('id', { count: 'exact', head: true })
       .eq('session_id', sessionIdValue)
@@ -314,7 +314,7 @@ async function handleMessage(req, res) {
 
     console.log(`[sales] reply stage=${stage} salesmanCount=${salesmanCount}`);
 
-    const { error: clientMessageError } = await supabaseAdmin
+    const { error: clientMessageError } = await supabase
       .from('sales_voice_messages')
       .insert([{ session_id: sessionIdValue, role: 'client', content: clientReplyText }]);
 
@@ -327,6 +327,48 @@ async function handleMessage(req, res) {
     res.status(200).json({ ok: true, client_message: clientReplyText, stage });
   } catch (err) {
     console.error('[sales-api] handler error', err);
+    res.status(500).json({ ok: false, error: 'Internal server error' });
+  }
+}
+
+async function handleGetSession(req, res, sessionId) {
+  if (!sessionId || sessionId.length > MAX_ID_LENGTH) {
+    res.status(400).json({ ok: false, error: 'invalid_session_id' });
+    return;
+  }
+
+  try {
+    const authContext = await getAuthenticatedClient(req, res);
+    if (!authContext) return;
+    const { supabase, userId } = authContext;
+
+    const { data: session, error: sessionError } = await supabase
+      .from('sales_voice_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .eq('user_id', userId)
+      .single();
+
+    if (sessionError || !session) {
+      res.status(404).json({ ok: false, error: 'session_not_found' });
+      return;
+    }
+
+    const { data: messages, error: messagesError } = await supabase
+      .from('sales_voice_messages')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true });
+
+    if (messagesError) {
+      console.error('[sales-api] failed to fetch session messages', messagesError);
+      res.status(500).json({ ok: false, error: 'supabase_query_failed' });
+      return;
+    }
+
+    res.status(200).json({ ok: true, session, messages: messages || [] });
+  } catch (err) {
+    console.error('[sales-api] session fetch error', err);
     res.status(500).json({ ok: false, error: 'Internal server error' });
   }
 }
