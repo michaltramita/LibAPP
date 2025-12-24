@@ -230,8 +230,7 @@ async function handleSession(req, res) {
     const { data: sessionData, error: sessionError } = await supabase
       .from('sales_voice_sessions')
       .insert([sessionInput])
-      .select('id')
-      .single();
+      .select('id');
 
     if (sessionError) {
       console.error('[sales-api] failed to insert session', sessionError);
@@ -239,13 +238,19 @@ async function handleSession(req, res) {
       return;
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(
-        `[sales-api] session created user=${userId.slice(0, 8)} session=${sessionData.id}`
-      );
+    const sessionId = Array.isArray(sessionData) ? sessionData[0]?.id : sessionData?.id;
+
+    if (!sessionId) {
+      console.error('[sales-api] session created but missing id', { sessionData });
+      res.status(500).json({ ok: false, error: 'missing_session_id' });
+      return;
     }
 
-    res.status(200).json({ ok: true, session_id: sessionData.id });
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[sales-api] session created user=${userId.slice(0, 8)} session=${sessionId}`);
+    }
+
+    res.status(200).json({ ok: true, session_id: sessionId });
   } catch (err) {
     console.error('[sales-api] session handler error', err);
     res.status(500).json({ ok: false, error: 'Internal server error' });
