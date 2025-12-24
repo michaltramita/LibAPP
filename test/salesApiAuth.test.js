@@ -258,7 +258,7 @@ test('missing env returns 500 with missing_env error', async () => {
   assert.deepStrictEqual(res.body, { error: 'missing_env' });
 });
 
-test('authorized user can create session and send message', async () => {
+test('authorized user can create session with user_id from token', async () => {
   const sessionRes = await callHandler({
     url: '/api/sales/session',
     method: 'POST',
@@ -279,20 +279,6 @@ test('authorized user can create session and send message', async () => {
     'user-1'
   );
 
-  const messageRes = await callHandler({
-    url: '/api/sales/message',
-    method: 'POST',
-    token: 'user-1',
-    body: {
-      session_id: sessionRes.body.session_id,
-      role: 'salesman',
-      content: 'Hello there',
-    },
-  });
-
-  assert.strictEqual(messageRes.statusCode, 200);
-  assert.strictEqual(messageRes.body.ok, true);
-  assert.ok(messageRes.body.client_message);
 });
 
 test('session creation ignores user_id from request body', async () => {

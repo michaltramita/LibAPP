@@ -159,6 +159,9 @@ async function handleSession(req, res) {
 
   const body = getJsonBody(req, res);
   if (!body) return;
+  if (Object.prototype.hasOwnProperty.call(body, 'user_id')) {
+    delete body.user_id;
+  }
   const requestedSessionId =
     typeof body.session_id === 'string' && body.session_id.trim() ? body.session_id.trim() : null;
   const difficulty =
@@ -218,13 +221,12 @@ async function handleSession(req, res) {
       difficulty,
       client_type: clientType,
       client_disc_type: clientDiscType,
+      user_id: userId,
     };
 
     if (requestedSessionId) {
       sessionInput.id = requestedSessionId;
     }
-
-    sessionInput.user_id = userId;
 
     const { data: sessionData, error: sessionError } = await supabase
       .from('sales_voice_sessions')
