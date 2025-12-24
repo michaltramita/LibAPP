@@ -1,4 +1,4 @@
-const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { createSupabaseUserClient } = require('../lib/supabaseUser');
 const { getJsonBody, getClientIp } = require('../lib/requestUtils');
 const { rateLimit } = require('../lib/rateLimit');
 
@@ -9,8 +9,27 @@ const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
 const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  const origin = req.headers.origin;
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const expectedOrigin = req.headers.host
+    ? `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`
+    : null;
+  const allowOrigin =
+    origin &&
+    (allowedOrigins.length
+      ? allowedOrigins.includes(origin)
+      : expectedOrigin && origin === expectedOrigin)
+      ? origin
+      : '';
+
+  if (allowOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+  }
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
 
   if (req.method === 'OPTIONS') {
@@ -20,6 +39,29 @@ module.exports = async function handler(req, res) {
 
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  const authHeader = req.headers.authorization || '';
+  const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!tokenMatch) {
+    res.status(401).json({ ok: false, error: 'unauthorized' });
+    return;
+  }
+
+  let supabaseUser;
+  try {
+    supabaseUser = createSupabaseUserClient(tokenMatch[1]);
+  } catch (error) {
+    console.error('[sales-api] failed to init supabase user client', error);
+    res.status(500).json({ ok: false, error: 'supabase_client_failed' });
+    return;
+  }
+
+  const { data: authData, error: authError } = await supabaseUser.auth.getUser();
+  const authUser = authData?.user;
+  if (authError || !authUser) {
+    res.status(401).json({ ok: false, error: 'unauthorized' });
     return;
   }
 
@@ -34,7 +76,6 @@ module.exports = async function handler(req, res) {
   if (!body) return;
   const requestedSessionId =
     typeof body.session_id === 'string' && body.session_id.trim() ? body.session_id.trim() : null;
-  const userId = typeof body.user_id === 'string' && body.user_id.trim() ? body.user_id.trim() : null;
   const difficulty =
     typeof body.difficulty === 'string' && body.difficulty.trim()
       ? body.difficulty.trim()
@@ -52,37 +93,32 @@ module.exports = async function handler(req, res) {
 
   try {
     if (requestedSessionId && requestedSessionId.length > MAX_ID_LENGTH) {
-      res.status(400).json({ ok: false, error: 'invalid_session_id' });
-      return;
-    }
-
-    if (userId && userId.length > MAX_ID_LENGTH) {
-      res.status(400).json({ ok: false, error: 'invalid_user_id' });
+      res.status(400).json({ ok: false, error: 'invalid_input' });
       return;
     }
 
     if (!ALLOWED_DIFFICULTIES.has(difficulty)) {
-      res.status(400).json({ ok: false, error: 'invalid_difficulty' });
+      res.status(400).json({ ok: false, error: 'invalid_input' });
       return;
     }
 
     if (!ALLOWED_CLIENT_TYPES.has(clientType)) {
-      res.status(400).json({ ok: false, error: 'invalid_client_type' });
+      res.status(400).json({ ok: false, error: 'invalid_input' });
       return;
     }
 
     if (clientDiscType && !ALLOWED_CLIENT_DISC_TYPES.has(clientDiscType)) {
-      res.status(400).json({ ok: false, error: 'invalid_client_disc_type' });
+      res.status(400).json({ ok: false, error: 'invalid_input' });
       return;
     }
 
     if (!ALLOWED_MODULES.has(moduleValue)) {
-      res.status(400).json({ ok: false, error: 'invalid_module' });
+      res.status(400).json({ ok: false, error: 'invalid_input' });
       return;
     }
 
     if (requestedSessionId) {
-      const { data: existingSessions, error: existingSessionError } = await supabaseAdmin
+      const { data: existingSessions, error: existingSessionError } = await supabaseUser
         .from('sales_voice_sessions')
         .select('id')
         .eq('id', requestedSessionId)
@@ -105,23 +141,24 @@ module.exports = async function handler(req, res) {
       difficulty,
       client_type: clientType,
       client_disc_type: clientDiscType,
+      user_id: authUser.id,
     };
 
     if (requestedSessionId) {
       sessionInput.id = requestedSessionId;
     }
 
-    if (userId) {
-      sessionInput.user_id = userId;
-    }
-
-    const { data: sessionData, error: sessionError } = await supabaseAdmin
+    const { data: sessionData, error: sessionError } = await supabaseUser
       .from('sales_voice_sessions')
       .insert([sessionInput])
       .select('id')
       .single();
 
     if (sessionError) {
+      if (sessionError.code === '23505') {
+        res.status(404).json({ ok: false, error: 'session_not_found' });
+        return;
+      }
       console.error('[sales-api] failed to insert session', sessionError);
       res.status(500).json({ ok: false, error: 'supabase_insert_failed' });
       return;

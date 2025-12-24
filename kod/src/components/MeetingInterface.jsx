@@ -7,6 +7,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { generateClientReply, getInitialMetrics, getInitialIntroFlags, getStartingMoodLevel } from '@/utils/salesSimulator';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 
 const MetricsDashboard = ({ metrics }) => {
@@ -60,10 +61,11 @@ const MetricsDashboard = ({ metrics }) => {
 };
 
 
-const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
+const MeetingInterface = ({ config, onEndMeeting, sessionId }) => {
   // Debugging log as requested
   console.log("sessionConfig received in MeetingInterface:", config);
 
+  const { session } = useAuth();
   const [sessionState, setSessionState] = useState({
     currentState: 'intro',
     metrics: getInitialMetrics(),
@@ -94,6 +96,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
   const clientType = config?.clientType || 'new';
   const clientDiscType = config?.clientDiscType || null;
   const difficulty = config?.difficulty || 'beginner';
+  const accessToken = session?.access_token;
 
   const mapBackendPhase = (phase) => {
     if (!phase) return null;
@@ -173,12 +176,17 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
       setCreatingVoiceSession(true);
 
       try {
+        if (!accessToken) {
+          throw new Error('Missing auth session');
+        }
         const response = await fetch('/api/sales/session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
           body: JSON.stringify({
             session_id: sessionId,
-            user_id: userId,
             module: 'obchodny_rozhovor',
             difficulty,
             client_type: clientType,
@@ -219,10 +227,10 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
     };
   }, [
     sessionId,
-    userId,
     clientType,
     clientDiscType,
     difficulty,
+    accessToken,
     voiceSessionId,
     creatingVoiceSession,
   ]);
@@ -273,9 +281,15 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, userId }) => {
     }
 
     try {
+      if (!accessToken) {
+        throw new Error('Missing auth session');
+      }
       const response = await fetch('/api/sales/message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
           session_id: voiceSessionId,
           role: 'salesman',

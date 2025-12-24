@@ -1,4 +1,4 @@
-const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { createSupabaseUserClient } = require('../lib/supabaseUser');
 const { getJsonBody, getClientIp } = require('../lib/requestUtils');
 const { rateLimit } = require('../lib/rateLimit');
 
@@ -6,8 +6,27 @@ const MAX_CONTENT_LENGTH = 1000;
 const MAX_ID_LENGTH = 128;
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  const origin = req.headers.origin;
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const expectedOrigin = req.headers.host
+    ? `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`
+    : null;
+  const allowOrigin =
+    origin &&
+    (allowedOrigins.length
+      ? allowedOrigins.includes(origin)
+      : expectedOrigin && origin === expectedOrigin)
+      ? origin
+      : '';
+
+  if (allowOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+  }
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
 
   if (req.method === 'OPTIONS') {
@@ -17,6 +36,29 @@ module.exports = async function handler(req, res) {
 
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  const authHeader = req.headers.authorization || '';
+  const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!tokenMatch) {
+    res.status(401).json({ ok: false, error: 'unauthorized' });
+    return;
+  }
+
+  let supabaseUser;
+  try {
+    supabaseUser = createSupabaseUserClient(tokenMatch[1]);
+  } catch (error) {
+    console.error('[sales-api] failed to init supabase user client', error);
+    res.status(500).json({ ok: false, error: 'supabase_client_failed' });
+    return;
+  }
+
+  const { data: authData, error: authError } = await supabaseUser.auth.getUser();
+  const authUser = authData?.user;
+  if (authError || !authUser) {
+    res.status(401).json({ ok: false, error: 'unauthorized' });
     return;
   }
 
@@ -43,7 +85,7 @@ module.exports = async function handler(req, res) {
   if (missingFields.length) {
     const details = `Missing or invalid fields: ${missingFields.join(', ')}`;
     console.warn(`[sales] message validation failed: ${details}`);
-    res.status(400).json({ ok: false, error: 'missing_fields', details });
+    res.status(400).json({ ok: false, error: 'invalid_input', details });
     return;
   }
 
@@ -51,22 +93,22 @@ module.exports = async function handler(req, res) {
   if (!allowedRoles.includes(roleValue)) {
     const details = `Invalid role: ${roleValue}`;
     console.warn(`[sales] message validation failed: ${details}`);
-    res.status(400).json({ ok: false, error: 'invalid_role', details });
+    res.status(400).json({ ok: false, error: 'invalid_input', details });
     return;
   }
 
   if (sessionIdValue.length > MAX_ID_LENGTH) {
-    res.status(400).json({ ok: false, error: 'invalid_session_id' });
+    res.status(400).json({ ok: false, error: 'invalid_input' });
     return;
   }
 
   if (contentValue.length > MAX_CONTENT_LENGTH) {
-    res.status(400).json({ ok: false, error: 'content_too_long' });
+    res.status(400).json({ ok: false, error: 'invalid_input' });
     return;
   }
 
   try {
-    const { data: existingSessions, error: sessionQueryError } = await supabaseAdmin
+    const { data: existingSessions, error: sessionQueryError } = await supabaseUser
       .from('sales_voice_sessions')
       .select('id')
       .eq('id', sessionIdValue)
@@ -84,9 +126,16 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const { error: messageError } = await supabaseAdmin
+    const { error: messageError } = await supabaseUser
       .from('sales_voice_messages')
-      .insert([{ session_id: sessionIdValue, role: roleValue, content: contentValue }]);
+      .insert([
+        {
+          session_id: sessionIdValue,
+          role: roleValue,
+          content: contentValue,
+          user_id: authUser.id,
+        },
+      ]);
 
     if (messageError) {
       console.error('[sales-api] failed to insert message', messageError);
@@ -94,7 +143,7 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const { error: salesmanCountError, count: salesmanCount } = await supabaseAdmin
+    const { error: salesmanCountError, count: salesmanCount } = await supabaseUser
       .from('sales_voice_messages')
       .select('id', { count: 'exact', head: true })
       .eq('session_id', sessionIdValue)
@@ -129,9 +178,16 @@ module.exports = async function handler(req, res) {
 
     console.log(`[sales] reply stage=${stage} salesmanCount=${salesmanCount}`);
 
-    const { error: clientMessageError } = await supabaseAdmin
+    const { error: clientMessageError } = await supabaseUser
       .from('sales_voice_messages')
-      .insert([{ session_id: sessionIdValue, role: 'client', content: clientReplyText }]);
+      .insert([
+        {
+          session_id: sessionIdValue,
+          role: 'client',
+          content: clientReplyText,
+          user_id: authUser.id,
+        },
+      ]);
 
     if (clientMessageError) {
       console.error('[sales-api] failed to insert client reply', clientMessageError);

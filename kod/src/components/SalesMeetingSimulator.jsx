@@ -132,7 +132,6 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
       config={sessionConfig}
       onEndMeeting={handleEndSession}
       sessionId={sessionId}
-      userId={user?.id}
     />
   );
 };
