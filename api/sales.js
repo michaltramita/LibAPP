@@ -132,8 +132,16 @@ function ensureSupabaseEnv(res) {
 function handleSupabaseFailure(res, error, fallbackMessage) {
   const message = error?.message || fallbackMessage;
   const status = error?.status;
+  const code = error?.code;
+  const lowerMessage = typeof message === 'string' ? message.toLowerCase() : '';
+  const isForbidden =
+    status === 401 ||
+    status === 403 ||
+    code === '42501' ||
+    lowerMessage.includes('row-level security') ||
+    lowerMessage.includes('permission denied');
 
-  if (status === 401 || status === 403) {
+  if (isForbidden) {
     res.status(403).json({ ok: false, error: 'forbidden', details: message });
     return;
   }
@@ -303,7 +311,7 @@ async function handleMessage(req, res) {
 
     if (sessionQueryError) {
       console.error('[sales-api] failed to verify session', sessionQueryError);
-      res.status(500).json({ ok: false, error: 'supabase_query_failed' });
+      handleSupabaseFailure(res, sessionQueryError, 'Unable to verify session');
       return;
     }
 
@@ -325,7 +333,7 @@ async function handleMessage(req, res) {
 
     if (messageError) {
       console.error('[sales-api] failed to insert message', messageError);
-      res.status(500).json({ ok: false, error: 'supabase_insert_failed' });
+      handleSupabaseFailure(res, messageError, 'Unable to insert message');
       return;
     }
 
@@ -337,11 +345,11 @@ async function handleMessage(req, res) {
 
     if (salesmanCountError) {
       console.error('[sales-api] failed to count salesman messages', salesmanCountError);
-      res.status(500).json({
-        ok: false,
-        error: 'salesman_count_failed',
-        details: salesmanCountError.message || 'Unable to read salesman messages count',
-      });
+      handleSupabaseFailure(
+        res,
+        salesmanCountError,
+        salesmanCountError.message || 'Unable to read salesman messages count'
+      );
       return;
     }
 
@@ -370,7 +378,7 @@ async function handleMessage(req, res) {
 
     if (clientMessageError) {
       console.error('[sales-api] failed to insert client reply', clientMessageError);
-      res.status(500).json({ ok: false, error: 'client_reply_insert_failed' });
+      handleSupabaseFailure(res, clientMessageError, 'Unable to insert client reply');
       return;
     }
 
@@ -399,7 +407,12 @@ async function handleGetSession(req, res, sessionId) {
       .eq('user_id', userId)
       .single();
 
-    if (sessionError || !session) {
+    if (sessionError) {
+      handleSupabaseFailure(res, sessionError, 'Unable to fetch session');
+      return;
+    }
+
+    if (!session) {
       res.status(404).json({ ok: false, error: 'session_not_found' });
       return;
     }
@@ -412,7 +425,7 @@ async function handleGetSession(req, res, sessionId) {
 
     if (messagesError) {
       console.error('[sales-api] failed to fetch session messages', messagesError);
-      res.status(500).json({ ok: false, error: 'supabase_query_failed' });
+      handleSupabaseFailure(res, messagesError, 'Unable to fetch session messages');
       return;
     }
 

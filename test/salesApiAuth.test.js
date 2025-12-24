@@ -83,7 +83,8 @@ class Query {
       return this.handleInsert();
     }
 
-    const data = this.applyFilters(this.readRows());
+    const rows = this.readRows();
+    const data = this.applyFilters(rows);
 
     if (this.count) {
       return { data: this.head ? null : data, count: data.length, error: null };
@@ -91,7 +92,16 @@ class Query {
 
     if (this.singleResult) {
       const row = data[0] || null;
-      return { data: row, error: row ? null : { message: 'not found' } };
+      if (row) {
+        return { data: row, error: null };
+      }
+
+      const forbidden = this.detectForbidden(rows);
+      if (forbidden) {
+        return { data: null, error: { status: 403, message: 'forbidden' } };
+      }
+
+      return { data: null, error: { message: 'not found' } };
     }
 
     return { data, error: null };
@@ -110,6 +120,17 @@ class Query {
   applyFilters(rows) {
     return rows.filter((row) =>
       this.filters.every((filter) => row[filter.column] === filter.value)
+    );
+  }
+
+  detectForbidden(rows) {
+    if (this.table !== 'sales_voice_sessions') return false;
+    const idFilter = this.filters.find((filter) => filter.column === 'id');
+    const userFilter = this.filters.find((filter) => filter.column === 'user_id');
+    if (!idFilter || !userFilter) return false;
+
+    return rows.some(
+      (row) => row.id === idFilter.value && row.user_id !== userFilter.value
     );
   }
 
@@ -280,6 +301,10 @@ test("user can't access another user's session", async () => {
     token: 'user-2',
   });
 
-  assert.strictEqual(res.statusCode, 404);
-  assert.deepStrictEqual(res.body, { ok: false, error: 'session_not_found' });
+  assert.strictEqual(res.statusCode, 403);
+  assert.deepStrictEqual(res.body, {
+    ok: false,
+    error: 'forbidden',
+    details: 'forbidden',
+  });
 });
