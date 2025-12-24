@@ -19,9 +19,7 @@ const toolDefinitions = [
 function createLLMClient() {
   console.log('[libo-llm-debug]', {
     enabled: process.env.LIBO_AI_ENABLED !== 'false',
-    hasKey: !!process.env.OPENAI_API_KEY,
-    keyPrefix: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.slice(0, 5) : null,
-    rawKey: process.env.OPENAI_API_KEY || '(undefined)'
+    hasKey: !!process.env.OPENAI_API_KEY
   });
   const enabled = process.env.LIBO_AI_ENABLED !== 'false';
   const apiKey = process.env.OPENAI_API_KEY;

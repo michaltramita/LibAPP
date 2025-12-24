@@ -1,4 +1,12 @@
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { getJsonBody, getClientIp } = require('../lib/requestUtils');
+const { rateLimit } = require('../lib/rateLimit');
+
+const MAX_ID_LENGTH = 128;
+const ALLOWED_DIFFICULTIES = new Set(['beginner', 'advanced', 'expert']);
+const ALLOWED_CLIENT_TYPES = new Set(['new', 'repeat']);
+const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
+const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,7 +23,15 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const body = req.body || {};
+  const ip = getClientIp(req);
+  const rate = rateLimit({ key: `sales-session:${ip}`, limit: 20, windowMs: 60_000 });
+  if (!rate.allowed) {
+    res.status(429).json({ ok: false, error: 'rate_limited' });
+    return;
+  }
+
+  const body = getJsonBody(req, res);
+  if (!body) return;
   const requestedSessionId =
     typeof body.session_id === 'string' && body.session_id.trim() ? body.session_id.trim() : null;
   const userId = typeof body.user_id === 'string' && body.user_id.trim() ? body.user_id.trim() : null;
@@ -35,6 +51,36 @@ module.exports = async function handler(req, res) {
       : 'obchodny_rozhovor';
 
   try {
+    if (requestedSessionId && requestedSessionId.length > MAX_ID_LENGTH) {
+      res.status(400).json({ ok: false, error: 'invalid_session_id' });
+      return;
+    }
+
+    if (userId && userId.length > MAX_ID_LENGTH) {
+      res.status(400).json({ ok: false, error: 'invalid_user_id' });
+      return;
+    }
+
+    if (!ALLOWED_DIFFICULTIES.has(difficulty)) {
+      res.status(400).json({ ok: false, error: 'invalid_difficulty' });
+      return;
+    }
+
+    if (!ALLOWED_CLIENT_TYPES.has(clientType)) {
+      res.status(400).json({ ok: false, error: 'invalid_client_type' });
+      return;
+    }
+
+    if (clientDiscType && !ALLOWED_CLIENT_DISC_TYPES.has(clientDiscType)) {
+      res.status(400).json({ ok: false, error: 'invalid_client_disc_type' });
+      return;
+    }
+
+    if (!ALLOWED_MODULES.has(moduleValue)) {
+      res.status(400).json({ ok: false, error: 'invalid_module' });
+      return;
+    }
+
     if (requestedSessionId) {
       const { data: existingSessions, error: existingSessionError } = await supabaseAdmin
         .from('sales_voice_sessions')

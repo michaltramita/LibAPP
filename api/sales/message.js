@@ -1,4 +1,9 @@
 const { supabaseAdmin } = require('../lib/supabaseAdmin');
+const { getJsonBody, getClientIp } = require('../lib/requestUtils');
+const { rateLimit } = require('../lib/rateLimit');
+
+const MAX_CONTENT_LENGTH = 1000;
+const MAX_ID_LENGTH = 128;
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,7 +20,15 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const body = req.body || {};
+  const ip = getClientIp(req);
+  const rate = rateLimit({ key: `sales-message:${ip}`, limit: 30, windowMs: 60_000 });
+  if (!rate.allowed) {
+    res.status(429).json({ ok: false, error: 'rate_limited' });
+    return;
+  }
+
+  const body = getJsonBody(req, res);
+  if (!body) return;
   const { session_id, role, content } = body;
 
   const missingFields = [];
@@ -42,6 +55,16 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  if (sessionIdValue.length > MAX_ID_LENGTH) {
+    res.status(400).json({ ok: false, error: 'invalid_session_id' });
+    return;
+  }
+
+  if (contentValue.length > MAX_CONTENT_LENGTH) {
+    res.status(400).json({ ok: false, error: 'content_too_long' });
+    return;
+  }
+
   try {
     const { data: existingSessions, error: sessionQueryError } = await supabaseAdmin
       .from('sales_voice_sessions')
@@ -63,7 +86,7 @@ module.exports = async function handler(req, res) {
 
     const { error: messageError } = await supabaseAdmin
       .from('sales_voice_messages')
-      .insert([{ session_id: sessionIdValue, role: roleValue, content }]);
+      .insert([{ session_id: sessionIdValue, role: roleValue, content: contentValue }]);
 
     if (messageError) {
       console.error('[sales-api] failed to insert message', messageError);

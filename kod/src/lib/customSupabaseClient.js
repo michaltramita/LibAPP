@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://nzocogzhakmqwiifrjuk.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56b2NvZ3poYWttcXdpaWZyanVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxNDE1NDcsImV4cCI6MjA3OTcxNzU0N30.nxlVycIOhyd7Zn9zXLhSP6FMhJfYvFdiIzReFRUHkHY';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase client env vars (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).');
+}
 
 const customSupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 

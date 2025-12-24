@@ -1,7 +1,11 @@
 const { createLLMClient } = require('./lib/llmClient');
 const { searchContext } = require('./lib/rag');
+const { getJsonBody, getClientIp } = require('./lib/requestUtils');
+const { rateLimit } = require('./lib/rateLimit');
 
 const sensitivePattern = /(rodn[eé] [čc]íslo|social security|iban|adresa)/i;
+const MAX_MESSAGE_LENGTH = 2000;
+const ALLOWED_LOCALES = new Set(['sk', 'en']);
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -9,7 +13,37 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const { message = '', sessionId, locale = 'sk', metadata = {} } = req.body || {};
+  const ip = getClientIp(req);
+  const rate = rateLimit({ key: `chat:${ip}`, limit: 20, windowMs: 60_000 });
+  if (!rate.allowed) {
+    res.status(429).json({ error: 'rate_limited' });
+    return;
+  }
+
+  const body = getJsonBody(req, res);
+  if (!body) return;
+
+  const message = typeof body.message === 'string' ? body.message.trim() : '';
+  const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : undefined;
+  const localeRaw = typeof body.locale === 'string' ? body.locale.trim() : 'sk';
+  const locale = ALLOWED_LOCALES.has(localeRaw) ? localeRaw : 'sk';
+  const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {};
+
+  if (!message) {
+    res.status(400).json({ error: 'missing_message' });
+    return;
+  }
+
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    res.status(400).json({ error: 'message_too_long' });
+    return;
+  }
+
+  if (sessionId && sessionId.length > 128) {
+    res.status(400).json({ error: 'invalid_session_id' });
+    return;
+  }
+
   logTelemetry({ sessionId, locale, metadata });
 
   if (sensitivePattern.test(message)) {
