@@ -26,14 +26,15 @@ function createMockSupabaseClient(token, state) {
         error: userId ? null : { message: 'unauthorized' },
       }),
     },
-    from: (table) => new Query(table, state),
+    from: (table) => new Query(table, state, userId),
   };
 }
 
 class Query {
-  constructor(table, state) {
+  constructor(table, state, userId) {
     this.table = table;
     this.state = state;
+    this.userId = userId;
     this.filters = [];
     this.insertRows = null;
     this.selectColumns = null;
@@ -137,6 +138,9 @@ class Query {
   handleInsert() {
     if (this.table === 'sales_voice_sessions') {
       const row = { ...this.insertRows[0] };
+      if (!row.user_id || row.user_id !== this.userId) {
+        return { data: null, error: { status: 403, message: 'forbidden' } };
+      }
       if (!row.id) {
         row.id = `session-${this.state.nextSessionId++}`;
       }
@@ -167,14 +171,15 @@ function pickColumns(row, columns) {
 }
 
 function loadHandler(options = {}) {
-  const { envError } = options;
+  const { envError, createUserSupabaseClient } = options;
   delete require.cache[handlerPath];
   require.cache[supabaseClientPath] = {
     id: supabaseClientPath,
     filename: supabaseClientPath,
     loaded: true,
     exports: {
-      createUserSupabaseClient: (token) => createMockSupabaseClient(token, mockState),
+      createUserSupabaseClient:
+        createUserSupabaseClient || ((token) => createMockSupabaseClient(token, mockState)),
       getSupabaseEnvError: () => envError || null,
     },
   };
@@ -269,6 +274,10 @@ test('authorized user can create session and send message', async () => {
   assert.strictEqual(sessionRes.statusCode, 200);
   assert.strictEqual(sessionRes.body.ok, true);
   assert.ok(sessionRes.body.session_id);
+  assert.strictEqual(
+    mockState.sessions.get(sessionRes.body.session_id).user_id,
+    'user-1'
+  );
 
   const messageRes = await callHandler({
     url: '/api/sales/message',
@@ -284,6 +293,52 @@ test('authorized user can create session and send message', async () => {
   assert.strictEqual(messageRes.statusCode, 200);
   assert.strictEqual(messageRes.body.ok, true);
   assert.ok(messageRes.body.client_message);
+});
+
+test('session creation ignores user_id from request body', async () => {
+  const res = await callHandler({
+    url: '/api/sales/session',
+    method: 'POST',
+    token: 'user-1',
+    body: { module: 'obchodny_rozhovor', user_id: 'user-2' },
+  });
+
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(
+    mockState.sessions.get(res.body.session_id).user_id,
+    'user-1'
+  );
+});
+
+test('session creation returns 403 on rls failure', async () => {
+  loadHandler({
+    createUserSupabaseClient: () => ({
+      auth: {
+        getUser: async () => ({ data: { user: { id: 'user-1' } }, error: null }),
+      },
+      from: () => ({
+        insert: () => ({
+          select: () => ({
+            single: () => ({ data: null, error: { status: 403, message: 'forbidden' } }),
+          }),
+        }),
+      }),
+    }),
+  });
+
+  const res = await callHandler({
+    url: '/api/sales/session',
+    method: 'POST',
+    token: 'user-1',
+    body: { module: 'obchodny_rozhovor' },
+  });
+
+  assert.strictEqual(res.statusCode, 403);
+  assert.deepStrictEqual(res.body, {
+    ok: false,
+    error: 'forbidden',
+    details: 'forbidden',
+  });
 });
 
 test("user can't access another user's session", async () => {
