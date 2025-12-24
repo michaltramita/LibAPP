@@ -4,6 +4,7 @@
   "routes": [
     { "src": "/api/sales/(.*)", "dest": "/api/sales" },
     { "src": "/api/chat/tool-callback", "dest": "/api/chat" },
-    { "src": "/api/(.*)", "dest": "/api/$1" }
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
