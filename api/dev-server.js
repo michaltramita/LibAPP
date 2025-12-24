@@ -1,6 +1,5 @@
 const http = require('http');
 const chatHandler = require('./chat');
-const toolCallbackHandler = require('./chat/tool-callback');
 const { createLLMClient } = require('./lib/llmClient');
 const { supabaseAdmin } = require('./lib/supabaseAdmin');
 
@@ -153,10 +152,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       try {
-        if (req.url === '/api/chat') {
+        if (req.url === '/api/chat' || req.url === '/api/chat/tool-callback') {
           await chatHandler(req, res);
-        } else if (req.url === '/api/chat/tool-callback') {
-          await toolCallbackHandler(req, res);
         } else if (req.url === '/api/sales/session/start') {
           const body = req.body || {};
           const sessionInput = {
