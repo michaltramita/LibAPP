@@ -8,6 +8,7 @@ const ALLOWED_DIFFICULTIES = new Set(['beginner', 'advanced', 'expert']);
 const ALLOWED_CLIENT_TYPES = new Set(['new', 'repeat']);
 const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
 const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
+const SESSION_OWNER_COLUMN = process.env.SALES_SESSION_OWNER_COLUMN || 'user_id';
 let missingSupabaseEnvLogged = false;
 
 module.exports = async function handler(req, res) {
@@ -80,7 +81,7 @@ async function getAuthenticatedClient(req, res) {
     if (process.env.NODE_ENV !== 'production') {
       console.log('[sales-api] auth context', { hasAuth, hasUserId: false });
     }
-    res.status(401).json({ error: 'unauthorized' });
+    res.status(401).json({ ok: false, error: 'unauthorized' });
     return null;
   }
 
@@ -111,7 +112,7 @@ async function getAuthenticatedClient(req, res) {
   }
 
   if (authError || !userId) {
-    res.status(401).json({ error: 'unauthorized' });
+    res.status(401).json({ ok: false, error: 'unauthorized' });
     return null;
   }
 
@@ -159,9 +160,7 @@ async function handleSession(req, res) {
 
   const body = getJsonBody(req, res);
   if (!body) return;
-  if (Object.prototype.hasOwnProperty.call(body, 'user_id')) {
-    delete body.user_id;
-  }
+  stripOwnershipFields(body);
   const requestedSessionId =
     typeof body.session_id === 'string' && body.session_id.trim() ? body.session_id.trim() : null;
   const difficulty =
@@ -187,9 +186,9 @@ async function handleSession(req, res) {
     if (requestedSessionId) {
       const { data: existingSessions, error: existingSessionError } = await supabase
         .from('sales_voice_sessions')
-        .select('id,user_id')
+        .select(`id,${SESSION_OWNER_COLUMN}`)
         .eq('id', requestedSessionId)
-        .eq('user_id', userId)
+        .eq(SESSION_OWNER_COLUMN, userId)
         .limit(1);
 
       if (existingSessionError) {
@@ -221,7 +220,7 @@ async function handleSession(req, res) {
       difficulty,
       client_type: clientType,
       client_disc_type: clientDiscType,
-      user_id: userId,
+      [SESSION_OWNER_COLUMN]: userId,
     };
 
     if (requestedSessionId) {
@@ -306,9 +305,9 @@ async function handleMessage(req, res) {
 
     const { data: existingSessions, error: sessionQueryError } = await supabase
       .from('sales_voice_sessions')
-      .select('id,user_id')
+      .select(`id,${SESSION_OWNER_COLUMN}`)
       .eq('id', sessionIdValue)
-      .eq('user_id', userId)
+      .eq(SESSION_OWNER_COLUMN, userId)
       .limit(1);
 
     if (sessionQueryError) {
@@ -406,7 +405,7 @@ async function handleGetSession(req, res, sessionId) {
       .from('sales_voice_sessions')
       .select('*')
       .eq('id', sessionId)
-      .eq('user_id', userId)
+      .eq(SESSION_OWNER_COLUMN, userId)
       .single();
 
     if (sessionError) {
@@ -435,5 +434,15 @@ async function handleGetSession(req, res, sessionId) {
   } catch (err) {
     console.error('[sales-api] session fetch error', err);
     res.status(500).json({ ok: false, error: 'Internal server error' });
+  }
+}
+
+function stripOwnershipFields(body) {
+  if (!body || typeof body !== 'object') return;
+  if (Object.prototype.hasOwnProperty.call(body, 'user_id')) {
+    delete body.user_id;
+  }
+  if (SESSION_OWNER_COLUMN !== 'user_id' && Object.prototype.hasOwnProperty.call(body, SESSION_OWNER_COLUMN)) {
+    delete body[SESSION_OWNER_COLUMN];
   }
 }

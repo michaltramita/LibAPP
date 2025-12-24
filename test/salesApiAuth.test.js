@@ -241,7 +241,7 @@ test('unauthorized session start returns 401', async () => {
   });
 
   assert.strictEqual(res.statusCode, 401);
-  assert.deepStrictEqual(res.body, { error: 'unauthorized' });
+  assert.deepStrictEqual(res.body, { ok: false, error: 'unauthorized' });
 });
 
 test('missing env returns 500 with missing_env error', async () => {
@@ -256,6 +256,27 @@ test('missing env returns 500 with missing_env error', async () => {
 
   assert.strictEqual(res.statusCode, 500);
   assert.deepStrictEqual(res.body, { error: 'missing_env' });
+});
+
+test('invalid token returns 401', async () => {
+  loadHandler({
+    createUserSupabaseClient: () => ({
+      auth: {
+        getUser: async () => ({ data: { user: null }, error: { message: 'unauthorized' } }),
+      },
+      from: () => ({}),
+    }),
+  });
+
+  const res = await callHandler({
+    url: '/api/sales/session',
+    method: 'POST',
+    token: 'invalid-token',
+    body: { module: 'obchodny_rozhovor' },
+  });
+
+  assert.strictEqual(res.statusCode, 401);
+  assert.deepStrictEqual(res.body, { ok: false, error: 'unauthorized' });
 });
 
 test('authorized user can create session with user_id from token', async () => {
