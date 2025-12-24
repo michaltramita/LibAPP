@@ -73,8 +73,12 @@ function resolveAllowedOrigin(req) {
 async function getAuthenticatedClient(req, res) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  const hasAuth = Boolean(token);
 
   if (!token) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[sales-api] auth context', { hasAuth, hasUserId: false });
+    }
     res.status(401).json({ error: 'unauthorized' });
     return null;
   }
@@ -82,6 +86,11 @@ async function getAuthenticatedClient(req, res) {
   const supabase = createUserSupabaseClient(token);
   const { data: authData, error: authError } = await supabase.auth.getUser();
   const userId = authData?.user?.id;
+  const hasUserId = Boolean(userId);
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[sales-api] auth context', { hasAuth, hasUserId });
+  }
 
   if (authError || !userId) {
     res.status(401).json({ error: 'unauthorized' });
@@ -89,6 +98,18 @@ async function getAuthenticatedClient(req, res) {
   }
 
   return { supabase, userId };
+}
+
+function handleSupabaseFailure(res, error, fallbackMessage) {
+  const message = error?.message || fallbackMessage;
+  const status = error?.status;
+
+  if (status === 401 || status === 403) {
+    res.status(403).json({ ok: false, error: 'forbidden', details: message });
+    return;
+  }
+
+  res.status(400).json({ ok: false, error: 'supabase_error', details: message });
 }
 
 async function handleSession(req, res) {
@@ -133,7 +154,11 @@ async function handleSession(req, res) {
 
       if (existingSessionError) {
         console.error('[sales-api] failed to check existing session', existingSessionError);
-        res.status(500).json({ ok: false, error: 'supabase_query_failed' });
+        handleSupabaseFailure(
+          res,
+          existingSessionError,
+          'Unable to check for an existing session'
+        );
         return;
       }
 
@@ -171,12 +196,8 @@ async function handleSession(req, res) {
       .single();
 
     if (sessionError) {
-      if (sessionError.code === '23505') {
-        res.status(404).json({ ok: false, error: 'session_not_found' });
-        return;
-      }
       console.error('[sales-api] failed to insert session', sessionError);
-      res.status(500).json({ ok: false, error: 'supabase_insert_failed' });
+      handleSupabaseFailure(res, sessionError, 'Unable to create session');
       return;
     }
 
