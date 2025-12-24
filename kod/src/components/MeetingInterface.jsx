@@ -172,8 +172,8 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       if (!sessionId || creatingVoiceSession || voiceSessionId) return;
       if (!accessToken) {
         toast({
-          title: "Prihlásenie vypršalo",
-          description: "Prihláste sa znova a skúste to ešte raz.",
+          title: "Prihlásenie potrebné",
+          description: "Prihlás sa, aby si mohol spustiť simuláciu.",
           variant: "destructive",
         });
         return;

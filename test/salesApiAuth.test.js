@@ -145,7 +145,8 @@ function pickColumns(row, columns) {
   return selected;
 }
 
-function loadHandler() {
+function loadHandler(options = {}) {
+  const { envError } = options;
   delete require.cache[handlerPath];
   require.cache[supabaseClientPath] = {
     id: supabaseClientPath,
@@ -153,6 +154,7 @@ function loadHandler() {
     loaded: true,
     exports: {
       createUserSupabaseClient: (token) => createMockSupabaseClient(token, mockState),
+      getSupabaseEnvError: () => envError || null,
     },
   };
   handler = require(handlerPath);
@@ -214,6 +216,20 @@ test('unauthorized session start returns 401', async () => {
 
   assert.strictEqual(res.statusCode, 401);
   assert.deepStrictEqual(res.body, { error: 'unauthorized' });
+});
+
+test('missing env returns 500 with missing_env error', async () => {
+  loadHandler({ envError: 'missing_env' });
+
+  const res = await callHandler({
+    url: '/api/sales/session',
+    method: 'POST',
+    token: 'user-1',
+    body: { module: 'obchodny_rozhovor' },
+  });
+
+  assert.strictEqual(res.statusCode, 500);
+  assert.deepStrictEqual(res.body, { error: 'missing_env' });
 });
 
 test('authorized user can create session and send message', async () => {

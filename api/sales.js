@@ -1,4 +1,4 @@
-const { createUserSupabaseClient } = require('./lib/supabaseClient');
+const { createUserSupabaseClient, getSupabaseEnvError } = require('./lib/supabaseClient');
 const { getJsonBody, getClientIp } = require('./lib/requestUtils');
 const { rateLimit } = require('./lib/rateLimit');
 
@@ -8,6 +8,7 @@ const ALLOWED_DIFFICULTIES = new Set(['beginner', 'advanced', 'expert']);
 const ALLOWED_CLIENT_TYPES = new Set(['new', 'repeat']);
 const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
 const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
+let missingSupabaseEnvLogged = false;
 
 module.exports = async function handler(req, res) {
   setCorsHeaders(req, res);
@@ -83,7 +84,24 @@ async function getAuthenticatedClient(req, res) {
     return null;
   }
 
-  const supabase = createUserSupabaseClient(token);
+  if (!ensureSupabaseEnv(res)) {
+    return null;
+  }
+
+  let supabase;
+  try {
+    supabase = createUserSupabaseClient(token);
+  } catch (error) {
+    if (error?.code === 'missing_env') {
+      if (!missingSupabaseEnvLogged) {
+        console.error('[sales-api] missing SUPABASE_URL or SUPABASE_ANON_KEY');
+        missingSupabaseEnvLogged = true;
+      }
+      res.status(500).json({ error: 'missing_env' });
+      return null;
+    }
+    throw error;
+  }
   const { data: authData, error: authError } = await supabase.auth.getUser();
   const userId = authData?.user?.id;
   const hasUserId = Boolean(userId);
@@ -98,6 +116,17 @@ async function getAuthenticatedClient(req, res) {
   }
 
   return { supabase, userId };
+}
+
+function ensureSupabaseEnv(res) {
+  const envError = getSupabaseEnvError();
+  if (!envError) return true;
+  if (!missingSupabaseEnvLogged) {
+    console.error('[sales-api] missing SUPABASE_URL or SUPABASE_ANON_KEY');
+    missingSupabaseEnvLogged = true;
+  }
+  res.status(500).json({ error: 'missing_env' });
+  return false;
 }
 
 function handleSupabaseFailure(res, error, fallbackMessage) {
