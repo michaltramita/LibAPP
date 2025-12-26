@@ -577,6 +577,19 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
                 </div>
             </main>
             
+            {import.meta.env.DEV && (
+              <div className="mb-3 p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
+                <div>activeSessionId: {String(!!activeSessionId)}</div>
+                <div>isSessionReady: {String(isSessionReady)}</div>
+                <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
+                <div>isTyping: {String(isTyping)}</div>
+                <div>isSending: {String(isSending)}</div>
+                <div>inputValue.length: {inputValue.length}</div>
+                <div>inputValue.trim.length: {inputValue.trim().length}</div>
+                <div>hasAccessToken: {String(!!accessToken)}</div>
+              </div>
+            )}
+
             {/* Input Area */}
             <footer className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 lg:p-8 bg-transparent z-30">
                 <div className="max-w-4xl mx-auto">
