@@ -10,6 +10,7 @@ import { generateClientReply, getInitialMetrics, getInitialIntroFlags, getStarti
 import { cn } from '@/lib/utils';
 
 const SALES_SESSION_STORAGE_KEY = 'sales_session_id';
+const SALES_DEBUG_STORAGE_KEY = 'sales_debug';
 
 const readStoredSessionId = () => {
   if (typeof window === 'undefined') return null;
@@ -25,6 +26,15 @@ const storeSessionId = (value) => {
   window.localStorage.setItem(SALES_SESSION_STORAGE_KEY, value);
 };
 
+const isSalesDebugEnabled = () => {
+  if (import.meta.env?.DEV) return true;
+  if (typeof window === 'undefined') return false;
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('debug') === '1') return true;
+
+  return window.localStorage.getItem(SALES_DEBUG_STORAGE_KEY) === '1';
+};
 
 const MetricsDashboard = ({ metrics }) => {
     const metricItems = [
@@ -164,6 +174,10 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const activePhaseIndex = Math.max(phases.indexOf(sessionState.currentState), 0);
 
   useEffect(() => {
+    if (isSalesDebugEnabled()) {
+      console.info('[sales-ui] debug enabled');
+    }
+
     // Speech Recognition Setup
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -577,6 +591,19 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
                 </div>
             </main>
             
+            {isSalesDebugEnabled() && (
+              <div className="mb-3 p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
+                <div>activeSessionId: {String(!!activeSessionId)}</div>
+                <div>isSessionReady: {String(isSessionReady)}</div>
+                <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
+                <div>isTyping: {String(isTyping)}</div>
+                <div>isSending: {String(isSending)}</div>
+                <div>inputValue.length: {inputValue.length}</div>
+                <div>inputValue.trim.length: {inputValue.trim().length}</div>
+                <div>hasAccessToken: {String(!!accessToken)}</div>
+              </div>
+            )}
+
             {/* Input Area */}
             <footer className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 lg:p-8 bg-transparent z-30">
                 <div className="max-w-4xl mx-auto">
