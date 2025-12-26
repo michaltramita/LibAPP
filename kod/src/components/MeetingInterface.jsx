@@ -624,22 +624,24 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
                 </div>
             </main>
             
-            {isSalesDebugEnabled() && (
-              <div className="mb-3 p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
-                <div>activeSessionId: {activeSessionId ?? 'null'}</div>
-                <div>routeSessionId: {routeSessionId ?? 'null'}</div>
-                <div>propSessionId: {sessionId ?? 'null'}</div>
-                <div>isSessionReady: {String(isSessionReady)}</div>
-                <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
-                <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
-                <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
-                <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
-                <div>lastInitTargetRef: {lastInitTargetRef.current ?? 'null'}</div>
-                <div>isTyping: {String(isTyping)}</div>
-                <div>isSending: {String(isSending)}</div>
-                <div>inputValue.length: {inputValue.length}</div>
-                <div>inputValue.trim.length: {inputValue.trim().length}</div>
-                <div>hasAccessToken: {String(!!accessToken)}</div>
+            {import.meta.env?.DEV && (
+              <div className="fixed bottom-[140px] left-4 z-50 max-h-[40vh] max-w-[420px] pointer-events-none">
+                <div className="pointer-events-auto overflow-y-auto p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
+                  <div>activeSessionId: {activeSessionId ?? 'null'}</div>
+                  <div>routeSessionId: {routeSessionId ?? 'null'}</div>
+                  <div>propSessionId: {sessionId ?? 'null'}</div>
+                  <div>isSessionReady: {String(isSessionReady)}</div>
+                  <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
+                  <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
+                  <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
+                  <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
+                  <div>lastInitTargetRef: {lastInitTargetRef.current ?? 'null'}</div>
+                  <div>isTyping: {String(isTyping)}</div>
+                  <div>isSending: {String(isSending)}</div>
+                  <div>inputValue.length: {inputValue.length}</div>
+                  <div>inputValue.trim.length: {inputValue.trim().length}</div>
+                  <div>hasAccessToken: {String(!!accessToken)}</div>
+                </div>
               </div>
             )}
 
