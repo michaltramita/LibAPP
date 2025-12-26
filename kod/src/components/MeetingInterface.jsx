@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { 
@@ -10,6 +10,7 @@ import { generateClientReply, getInitialMetrics, getInitialIntroFlags, getStarti
 import { cn } from '@/lib/utils';
 
 const SALES_SESSION_STORAGE_KEY = 'sales_session_id';
+const SALES_VOICE_SESSION_STORAGE_KEY = 'sales_voice_session_id';
 const SALES_DEBUG_STORAGE_KEY = 'sales_debug';
 
 const readStoredSessionId = () => {
@@ -24,6 +25,20 @@ const storeSessionId = (value) => {
     return;
   }
   window.localStorage.setItem(SALES_SESSION_STORAGE_KEY, value);
+};
+
+const readStoredVoiceSessionId = () => {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(SALES_VOICE_SESSION_STORAGE_KEY);
+};
+
+const storeVoiceSessionId = (value) => {
+  if (typeof window === 'undefined') return;
+  if (!value) {
+    window.localStorage.removeItem(SALES_VOICE_SESSION_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(SALES_VOICE_SESSION_STORAGE_KEY, value);
 };
 
 const isSalesDebugEnabled = () => {
@@ -91,7 +106,6 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   // Debugging log as requested
   console.log("sessionConfig received in MeetingInterface:", config);
   const { sessionId: routeSessionId } = useParams();
-  const navigate = useNavigate();
 
   const [sessionState, setSessionState] = useState({
     currentState: 'intro',
@@ -117,6 +131,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const [activeSessionId, setActiveSessionId] = useState(
     () => sessionId || routeSessionId || readStoredSessionId()
   );
+  const [voiceSessionId, setVoiceSessionId] = useState(() => readStoredVoiceSessionId());
   const [isSessionReady, setIsSessionReady] = useState(false);
   const [lastSessionInitStatus, setLastSessionInitStatus] = useState(null);
   const [lastSessionInitError, setLastSessionInitError] = useState(null);
@@ -126,6 +141,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const recognitionRef = useRef(null);
   const lastInitTargetRef = useRef(null);
   const previousRouteSessionIdRef = useRef(routeSessionId);
+  const previousAppSessionIdRef = useRef(activeSessionId);
   const { toast } = useToast();
 
   const clientType = config?.clientType || 'new';
@@ -144,7 +160,10 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       }
       storeSessionId(routeSessionId);
       if (routeChanged) {
+        setVoiceSessionId(null);
+        storeVoiceSessionId(null);
         setIsSessionReady(false);
+        lastInitTargetRef.current = null;
       }
       return;
     }
@@ -155,7 +174,10 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     }
 
     if (routeChanged) {
+      setVoiceSessionId(null);
+      storeVoiceSessionId(null);
       setIsSessionReady(false);
+      lastInitTargetRef.current = null;
     }
   }, [routeSessionId, sessionId, activeSessionId]);
 
@@ -167,6 +189,22 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       }
     }
   }, [activeSessionId]);
+
+  useEffect(() => {
+    if (previousAppSessionIdRef.current !== activeSessionId) {
+      previousAppSessionIdRef.current = activeSessionId;
+      setVoiceSessionId(null);
+      storeVoiceSessionId(null);
+      setIsSessionReady(false);
+      lastInitTargetRef.current = null;
+    }
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (voiceSessionId) {
+      setIsSessionReady(true);
+    }
+  }, [voiceSessionId]);
 
   const mapBackendPhase = (phase) => {
     if (!phase) return null;
@@ -246,6 +284,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     let isMounted = true;
 
     const initializeSalesSession = async () => {
+      if (voiceSessionId) return;
       if (!activeSessionId || creatingVoiceSession || isSessionReady) return;
       if (lastInitTargetRef.current === activeSessionId) return;
       if (!accessToken) {
@@ -319,12 +358,9 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     const ensureVoiceSession = async () => {
       const newVoiceSessionId = await initializeSalesSession();
       if (newVoiceSessionId && isMounted) {
-        setActiveSessionId(newVoiceSessionId);
-        storeSessionId(newVoiceSessionId);
+        setVoiceSessionId(newVoiceSessionId);
+        storeVoiceSessionId(newVoiceSessionId);
         setIsSessionReady(true);
-        if (newVoiceSessionId !== routeSessionId) {
-          navigate(`/session/${newVoiceSessionId}`, { replace: true });
-        }
       }
     };
 
@@ -335,13 +371,13 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     };
   }, [
     activeSessionId,
+    voiceSessionId,
     clientType,
     clientDiscType,
     difficulty,
     isSessionReady,
     creatingVoiceSession,
     accessToken,
-    navigate,
     routeSessionId,
     toast,
   ]);
@@ -375,11 +411,13 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const handleSendMessage = async () => {
     const trimmed = inputValue.trim();
     if (!trimmed || isSending || isTyping) return;
-    if (!activeSessionId || !isSessionReady) {
+    if (!voiceSessionId || !isSessionReady) {
       if (import.meta.env?.DEV) {
         console.warn('[sales-ui] missing session id', {
           activeSessionId,
+          voiceSessionId,
           routeSessionId,
+          storedVoiceSessionId: readStoredVoiceSessionId(),
           storedSessionId: readStoredSessionId(),
           sessionState,
           path: window.location.pathname,
@@ -406,14 +444,14 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
 
     const messageEndpoint = '/api/sales/message';
     const payload = {
-      session_id: activeSessionId,
+      session_id: voiceSessionId,
       role: 'salesman',
       content: trimmed,
     };
 
     if (import.meta.env?.DEV) {
       console.log('[sales-ui] sending message', {
-        sessionId: activeSessionId,
+        sessionId: voiceSessionId,
         payload,
         endpoint: messageEndpoint,
       });
@@ -624,26 +662,25 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
                 </div>
             </main>
             
-            {import.meta.env?.DEV && (
-              <div className="fixed bottom-[140px] left-4 z-50 max-h-[40vh] max-w-[420px] pointer-events-none">
-                <div className="pointer-events-auto overflow-y-auto p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
-                  <div>activeSessionId: {activeSessionId ?? 'null'}</div>
-                  <div>routeSessionId: {routeSessionId ?? 'null'}</div>
-                  <div>propSessionId: {sessionId ?? 'null'}</div>
-                  <div>isSessionReady: {String(isSessionReady)}</div>
-                  <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
-                  <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
-                  <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
-                  <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
-                  <div>lastInitTargetRef: {lastInitTargetRef.current ?? 'null'}</div>
-                  <div>isTyping: {String(isTyping)}</div>
-                  <div>isSending: {String(isSending)}</div>
-                  <div>inputValue.length: {inputValue.length}</div>
-                  <div>inputValue.trim.length: {inputValue.trim().length}</div>
-                  <div>hasAccessToken: {String(!!accessToken)}</div>
-                </div>
+            <div className="fixed bottom-[140px] left-4 z-50 max-h-[40vh] max-w-[420px] pointer-events-none">
+              <div className="pointer-events-auto overflow-y-auto p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
+                <div>activeSessionId: {activeSessionId ?? 'null'}</div>
+                <div>voiceSessionId: {voiceSessionId ?? 'null'}</div>
+                <div>routeSessionId: {routeSessionId ?? 'null'}</div>
+                <div>propSessionId: {sessionId ?? 'null'}</div>
+                <div>isSessionReady: {String(isSessionReady)}</div>
+                <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
+                <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
+                <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
+                <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
+                <div>lastInitTargetRef: {lastInitTargetRef.current ?? 'null'}</div>
+                <div>isTyping: {String(isTyping)}</div>
+                <div>isSending: {String(isSending)}</div>
+                <div>inputValue.length: {inputValue.length}</div>
+                <div>inputValue.trim.length: {inputValue.trim().length}</div>
+                <div>hasAccessToken: {String(!!accessToken)}</div>
               </div>
-            )}
+            </div>
 
             {/* Input Area */}
             <footer className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 lg:p-8 bg-transparent z-30">
@@ -676,7 +713,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
                                 onClick={handleSendMessage}
                                 size="icon"
                                 className="rounded-full w-10 h-10 bg-slate-800 hover:bg-slate-900 text-white shadow"
-                                disabled={!activeSessionId || !isSessionReady || creatingVoiceSession || !inputValue.trim() || isTyping || isSending}
+                                disabled={!voiceSessionId || !isSessionReady || creatingVoiceSession || !inputValue.trim() || isTyping || isSending}
                             >
                                 <Send className="w-5 h-5" />
                             </Button>
