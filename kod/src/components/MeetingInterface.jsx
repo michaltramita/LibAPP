@@ -124,6 +124,8 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
+  const lastInitTargetRef = useRef(null);
+  const previousRouteSessionIdRef = useRef(routeSessionId);
   const { toast } = useToast();
 
   const clientType = config?.clientType || 'new';
@@ -131,13 +133,31 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const difficulty = config?.difficulty || 'beginner';
 
   useEffect(() => {
-    const candidate = sessionId || routeSessionId;
-    if (candidate && candidate !== activeSessionId) {
-      setActiveSessionId(candidate);
-      storeSessionId(candidate);
+    const routeChanged = previousRouteSessionIdRef.current !== routeSessionId;
+    if (routeChanged) {
+      previousRouteSessionIdRef.current = routeSessionId;
+    }
+
+    if (routeSessionId) {
+      if (routeSessionId !== activeSessionId) {
+        setActiveSessionId(routeSessionId);
+      }
+      storeSessionId(routeSessionId);
+      if (routeChanged) {
+        setIsSessionReady(false);
+      }
+      return;
+    }
+
+    if (!activeSessionId && sessionId) {
+      setActiveSessionId(sessionId);
+      storeSessionId(sessionId);
+    }
+
+    if (routeChanged) {
       setIsSessionReady(false);
     }
-  }, [sessionId, routeSessionId, activeSessionId]);
+  }, [routeSessionId, sessionId, activeSessionId]);
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -227,6 +247,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
 
     const initializeSalesSession = async () => {
       if (!activeSessionId || creatingVoiceSession || isSessionReady) return;
+      if (lastInitTargetRef.current === activeSessionId) return;
       if (!accessToken) {
         toast({
           title: "Prihlásenie potrebné",
@@ -235,6 +256,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
         });
         return;
       }
+      lastInitTargetRef.current = activeSessionId;
       setCreatingVoiceSession(true);
       setLastSessionInitAt(new Date().toISOString());
       setLastSessionInitError(null);
@@ -300,7 +322,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
         setActiveSessionId(newVoiceSessionId);
         storeSessionId(newVoiceSessionId);
         setIsSessionReady(true);
-        if (routeSessionId && newVoiceSessionId !== routeSessionId) {
+        if (newVoiceSessionId !== routeSessionId) {
           navigate(`/session/${newVoiceSessionId}`, { replace: true });
         }
       }
@@ -605,11 +627,14 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             {isSalesDebugEnabled() && (
               <div className="mb-3 p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
                 <div>activeSessionId: {activeSessionId ?? 'null'}</div>
+                <div>routeSessionId: {routeSessionId ?? 'null'}</div>
+                <div>propSessionId: {sessionId ?? 'null'}</div>
                 <div>isSessionReady: {String(isSessionReady)}</div>
                 <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
                 <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
                 <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
                 <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
+                <div>lastInitTargetRef: {lastInitTargetRef.current ?? 'null'}</div>
                 <div>isTyping: {String(isTyping)}</div>
                 <div>isSending: {String(isSending)}</div>
                 <div>inputValue.length: {inputValue.length}</div>
