@@ -118,6 +118,9 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     () => sessionId || routeSessionId || readStoredSessionId()
   );
   const [isSessionReady, setIsSessionReady] = useState(false);
+  const [lastSessionInitStatus, setLastSessionInitStatus] = useState(null);
+  const [lastSessionInitError, setLastSessionInitError] = useState(null);
+  const [lastSessionInitAt, setLastSessionInitAt] = useState(null);
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -233,10 +236,15 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
         return;
       }
       setCreatingVoiceSession(true);
+      setLastSessionInitAt(new Date().toISOString());
+      setLastSessionInitError(null);
 
       try {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 10000);
         const response = await fetch('/api/sales/session', {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${accessToken}`,
@@ -248,7 +256,10 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             client_type: clientType,
             client_disc_type: clientDiscType,
           }),
+        }).finally(() => {
+          window.clearTimeout(timeoutId);
         });
+        setLastSessionInitStatus(response.status);
 
         const data = await response.json().catch(() => null);
         if (!response.ok) {
@@ -267,6 +278,8 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
 
         return newVoiceSessionId;
       } catch (err) {
+        const message = err?.name === 'AbortError' ? 'session init timeout' : err?.message;
+        setLastSessionInitError(message || null);
         console.error('Failed to initialize sales session', err);
         if (isMounted) {
           toast({
@@ -277,9 +290,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
         }
         return undefined;
       } finally {
-        if (isMounted) {
-          setCreatingVoiceSession(false);
-        }
+        setCreatingVoiceSession(false);
       }
     };
 
@@ -593,9 +604,12 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             
             {isSalesDebugEnabled() && (
               <div className="mb-3 p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
-                <div>activeSessionId: {String(!!activeSessionId)}</div>
+                <div>activeSessionId: {activeSessionId ?? 'null'}</div>
                 <div>isSessionReady: {String(isSessionReady)}</div>
                 <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
+                <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
+                <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
+                <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
                 <div>isTyping: {String(isTyping)}</div>
                 <div>isSending: {String(isSending)}</div>
                 <div>inputValue.length: {inputValue.length}</div>
