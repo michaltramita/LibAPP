@@ -360,6 +360,9 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       if (newVoiceSessionId && isMounted) {
         setVoiceSessionId(newVoiceSessionId);
         storeVoiceSessionId(newVoiceSessionId);
+        setActiveSessionId(newVoiceSessionId);
+        storeSessionId(newVoiceSessionId);
+        // Backend can return the same session_id for reuse; treat it as ready to avoid UI deadlocks.
         setIsSessionReady(true);
       }
     };
