@@ -334,6 +334,8 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
           activeSessionId,
           routeSessionId,
           storedSessionId: readStoredSessionId(),
+          sessionState,
+          path: window.location.pathname,
         });
       }
       toast({ title: "Chýba relácia", description: "Relácia nie je k dispozícii. Skúste obnoviť stránku.", variant: "destructive" });
@@ -355,25 +357,38 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     setIsSending(true);
     window.speechSynthesis.cancel();
 
+    const messageEndpoint = '/api/sales/message';
+    const payload = {
+      session_id: activeSessionId,
+      role: 'salesman',
+      content: trimmed,
+    };
+
     if (import.meta.env?.DEV) {
-      console.log(`[sales-ui] POST /api/sales/message len=${trimmed.length}`);
+      console.log('[sales-ui] sending message', {
+        sessionId: activeSessionId,
+        payload,
+        endpoint: messageEndpoint,
+      });
     }
 
     try {
-      const response = await fetch('/api/sales/message', {
+      const response = await fetch(messageEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          session_id: activeSessionId,
-          role: 'salesman',
-          content: trimmed,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json().catch(() => null);
+      if (import.meta.env?.DEV) {
+        console.log('[sales-ui] message response', {
+          status: response.status,
+          data,
+        });
+      }
       if (!response.ok) {
         throw new Error(data?.details || data?.error || `HTTP ${response.status}`);
       }
