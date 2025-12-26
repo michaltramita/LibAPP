@@ -128,8 +128,8 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const [isSending, setIsSending] = useState(false);
   const [showMetrics, setShowMetrics] = useState(true);
   const [creatingVoiceSession, setCreatingVoiceSession] = useState(false);
-  const [activeSessionId, setActiveSessionId] = useState(
-    () => sessionId || routeSessionId || readStoredSessionId()
+  const [appSessionId, setAppSessionId] = useState(
+    () => routeSessionId || sessionId || readStoredSessionId()
   );
   const [voiceSessionId, setVoiceSessionId] = useState(() => readStoredVoiceSessionId());
   const [isSessionReady, setIsSessionReady] = useState(false);
@@ -141,7 +141,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const recognitionRef = useRef(null);
   const lastInitTargetRef = useRef(null);
   const previousRouteSessionIdRef = useRef(routeSessionId);
-  const previousAppSessionIdRef = useRef(activeSessionId);
+  const previousAppSessionIdRef = useRef(appSessionId);
   const { toast } = useToast();
 
   const clientType = config?.clientType || 'new';
@@ -155,50 +155,43 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     }
 
     if (routeSessionId) {
-      if (routeSessionId !== activeSessionId) {
-        setActiveSessionId(routeSessionId);
+      if (routeSessionId !== appSessionId) {
+        setAppSessionId(routeSessionId);
       }
       storeSessionId(routeSessionId);
-      if (routeChanged) {
-        setVoiceSessionId(null);
-        storeVoiceSessionId(null);
-        setIsSessionReady(false);
-        lastInitTargetRef.current = null;
-      }
       return;
     }
 
-    if (!activeSessionId && sessionId) {
-      setActiveSessionId(sessionId);
+    if (!appSessionId && sessionId) {
+      setAppSessionId(sessionId);
       storeSessionId(sessionId);
     }
-
-    if (routeChanged) {
-      setVoiceSessionId(null);
-      storeVoiceSessionId(null);
-      setIsSessionReady(false);
-      lastInitTargetRef.current = null;
-    }
-  }, [routeSessionId, sessionId, activeSessionId]);
+  }, [routeSessionId, sessionId, appSessionId]);
 
   useEffect(() => {
-    if (!activeSessionId) {
+    if (appSessionId) {
+      storeSessionId(appSessionId);
+    }
+  }, [appSessionId]);
+
+  useEffect(() => {
+    if (!appSessionId) {
       const stored = readStoredSessionId();
       if (stored) {
-        setActiveSessionId(stored);
+        setAppSessionId(stored);
       }
     }
-  }, [activeSessionId]);
+  }, [appSessionId]);
 
   useEffect(() => {
-    if (previousAppSessionIdRef.current !== activeSessionId) {
-      previousAppSessionIdRef.current = activeSessionId;
+    if (previousAppSessionIdRef.current !== appSessionId) {
+      previousAppSessionIdRef.current = appSessionId;
       setVoiceSessionId(null);
       storeVoiceSessionId(null);
       setIsSessionReady(false);
       lastInitTargetRef.current = null;
     }
-  }, [activeSessionId]);
+  }, [appSessionId]);
 
   useEffect(() => {
     if (voiceSessionId) {
@@ -285,8 +278,8 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
 
     const initializeSalesSession = async () => {
       if (voiceSessionId) return;
-      if (!activeSessionId || creatingVoiceSession || isSessionReady) return;
-      if (lastInitTargetRef.current === activeSessionId) return;
+      if (!appSessionId || creatingVoiceSession || isSessionReady) return;
+      if (lastInitTargetRef.current === appSessionId) return;
       if (!accessToken) {
         toast({
           title: "Prihlásenie potrebné",
@@ -295,7 +288,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
         });
         return;
       }
-      lastInitTargetRef.current = activeSessionId;
+      lastInitTargetRef.current = appSessionId;
       setCreatingVoiceSession(true);
       setLastSessionInitAt(new Date().toISOString());
       setLastSessionInitError(null);
@@ -311,7 +304,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
-            session_id: activeSessionId,
+            session_id: appSessionId,
             module: 'obchodny_rozhovor',
             difficulty,
             client_type: clientType,
@@ -360,8 +353,6 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       if (newVoiceSessionId && isMounted) {
         setVoiceSessionId(newVoiceSessionId);
         storeVoiceSessionId(newVoiceSessionId);
-        setActiveSessionId(newVoiceSessionId);
-        storeSessionId(newVoiceSessionId);
         // Backend can return the same session_id for reuse; treat it as ready to avoid UI deadlocks.
         setIsSessionReady(true);
       }
@@ -373,7 +364,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       isMounted = false;
     };
   }, [
-    activeSessionId,
+    appSessionId,
     voiceSessionId,
     clientType,
     clientDiscType,
@@ -414,10 +405,11 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const handleSendMessage = async () => {
     const trimmed = inputValue.trim();
     if (!trimmed || isSending || isTyping) return;
-    if (!voiceSessionId || !isSessionReady) {
+    const effectiveSessionId = voiceSessionId || appSessionId;
+    if (!effectiveSessionId || !isSessionReady) {
       if (import.meta.env?.DEV) {
         console.warn('[sales-ui] missing session id', {
-          activeSessionId,
+          appSessionId,
           voiceSessionId,
           routeSessionId,
           storedVoiceSessionId: readStoredVoiceSessionId(),
@@ -447,14 +439,14 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
 
     const messageEndpoint = '/api/sales/message';
     const payload = {
-      session_id: voiceSessionId,
+      session_id: effectiveSessionId,
       role: 'salesman',
       content: trimmed,
     };
 
     if (import.meta.env?.DEV) {
       console.log('[sales-ui] sending message', {
-        sessionId: voiceSessionId,
+        sessionId: effectiveSessionId,
         payload,
         endpoint: messageEndpoint,
       });
@@ -665,25 +657,27 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
                 </div>
             </main>
             
-            <div className="fixed bottom-[140px] left-4 z-50 max-h-[40vh] max-w-[420px] pointer-events-none">
-              <div className="pointer-events-auto overflow-y-auto p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
-                <div>activeSessionId: {activeSessionId ?? 'null'}</div>
-                <div>voiceSessionId: {voiceSessionId ?? 'null'}</div>
-                <div>routeSessionId: {routeSessionId ?? 'null'}</div>
-                <div>propSessionId: {sessionId ?? 'null'}</div>
-                <div>isSessionReady: {String(isSessionReady)}</div>
-                <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
-                <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
-                <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
-                <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
-                <div>lastInitTargetRef: {lastInitTargetRef.current ?? 'null'}</div>
-                <div>isTyping: {String(isTyping)}</div>
-                <div>isSending: {String(isSending)}</div>
-                <div>inputValue.length: {inputValue.length}</div>
-                <div>inputValue.trim.length: {inputValue.trim().length}</div>
-                <div>hasAccessToken: {String(!!accessToken)}</div>
+            {isSalesDebugEnabled() && (
+              <div className="fixed top-4 left-4 z-50 max-h-[40vh] max-w-[420px] pointer-events-none">
+                <div className="pointer-events-auto overflow-y-auto p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
+                  <div>appSessionId: {appSessionId ?? 'null'}</div>
+                  <div>voiceSessionId: {voiceSessionId ?? 'null'}</div>
+                  <div>routeSessionId: {routeSessionId ?? 'null'}</div>
+                  <div>propSessionId: {sessionId ?? 'null'}</div>
+                  <div>isSessionReady: {String(isSessionReady)}</div>
+                  <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
+                  <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
+                  <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
+                  <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
+                  <div>lastInitTargetRef: {lastInitTargetRef.current ?? 'null'}</div>
+                  <div>isTyping: {String(isTyping)}</div>
+                  <div>isSending: {String(isSending)}</div>
+                  <div>inputValue.length: {inputValue.length}</div>
+                  <div>inputValue.trim.length: {inputValue.trim().length}</div>
+                  <div>hasAccessToken: {String(!!accessToken)}</div>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Input Area */}
             <footer className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 lg:p-8 bg-transparent z-30">
