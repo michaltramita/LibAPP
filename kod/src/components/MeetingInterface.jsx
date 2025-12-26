@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { 
@@ -7,6 +8,22 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { generateClientReply, getInitialMetrics, getInitialIntroFlags, getStartingMoodLevel } from '@/utils/salesSimulator';
 import { cn } from '@/lib/utils';
+
+const SALES_SESSION_STORAGE_KEY = 'sales_session_id';
+
+const readStoredSessionId = () => {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(SALES_SESSION_STORAGE_KEY);
+};
+
+const storeSessionId = (value) => {
+  if (typeof window === 'undefined') return;
+  if (!value) {
+    window.localStorage.removeItem(SALES_SESSION_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(SALES_SESSION_STORAGE_KEY, value);
+};
 
 
 const MetricsDashboard = ({ metrics }) => {
@@ -63,6 +80,8 @@ const MetricsDashboard = ({ metrics }) => {
 const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   // Debugging log as requested
   console.log("sessionConfig received in MeetingInterface:", config);
+  const { sessionId: routeSessionId } = useParams();
+  const navigate = useNavigate();
 
   const [sessionState, setSessionState] = useState({
     currentState: 'intro',
@@ -84,8 +103,11 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const [isListening, setIsListening] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showMetrics, setShowMetrics] = useState(true);
-  const [voiceSessionId, setVoiceSessionId] = useState(null);
   const [creatingVoiceSession, setCreatingVoiceSession] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState(
+    () => sessionId || routeSessionId || readStoredSessionId()
+  );
+  const [isSessionReady, setIsSessionReady] = useState(false);
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -94,6 +116,24 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const clientType = config?.clientType || 'new';
   const clientDiscType = config?.clientDiscType || null;
   const difficulty = config?.difficulty || 'beginner';
+
+  useEffect(() => {
+    const candidate = sessionId || routeSessionId;
+    if (candidate && candidate !== activeSessionId) {
+      setActiveSessionId(candidate);
+      storeSessionId(candidate);
+      setIsSessionReady(false);
+    }
+  }, [sessionId, routeSessionId, activeSessionId]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      const stored = readStoredSessionId();
+      if (stored) {
+        setActiveSessionId(stored);
+      }
+    }
+  }, [activeSessionId]);
 
   const mapBackendPhase = (phase) => {
     if (!phase) return null;
@@ -169,7 +209,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     let isMounted = true;
 
     const initializeSalesSession = async () => {
-      if (!sessionId || creatingVoiceSession || voiceSessionId) return;
+      if (!activeSessionId || creatingVoiceSession || isSessionReady) return;
       if (!accessToken) {
         toast({
           title: "Prihlásenie potrebné",
@@ -188,7 +228,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             Authorization: `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
-            session_id: sessionId,
+            session_id: activeSessionId,
             module: 'obchodny_rozhovor',
             difficulty,
             client_type: clientType,
@@ -232,7 +272,12 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     const ensureVoiceSession = async () => {
       const newVoiceSessionId = await initializeSalesSession();
       if (newVoiceSessionId && isMounted) {
-        setVoiceSessionId(newVoiceSessionId);
+        setActiveSessionId(newVoiceSessionId);
+        storeSessionId(newVoiceSessionId);
+        setIsSessionReady(true);
+        if (routeSessionId && newVoiceSessionId !== routeSessionId) {
+          navigate(`/session/${newVoiceSessionId}`, { replace: true });
+        }
       }
     };
 
@@ -242,13 +287,16 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       isMounted = false;
     };
   }, [
-    sessionId,
+    activeSessionId,
     clientType,
     clientDiscType,
     difficulty,
-    voiceSessionId,
+    isSessionReady,
     creatingVoiceSession,
     accessToken,
+    navigate,
+    routeSessionId,
+    toast,
   ]);
 
   useEffect(() => {
@@ -280,7 +328,14 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const handleSendMessage = async () => {
     const trimmed = inputValue.trim();
     if (!trimmed || isSending || isTyping) return;
-    if (!voiceSessionId) {
+    if (!activeSessionId || !isSessionReady) {
+      if (import.meta.env?.DEV) {
+        console.warn('[sales-ui] missing session id', {
+          activeSessionId,
+          routeSessionId,
+          storedSessionId: readStoredSessionId(),
+        });
+      }
       toast({ title: "Chýba relácia", description: "Relácia nie je k dispozícii. Skúste obnoviť stránku.", variant: "destructive" });
       return;
     }
@@ -312,17 +367,16 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
           Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-          session_id: voiceSessionId,
+          session_id: activeSessionId,
           role: 'salesman',
           content: trimmed,
         }),
       });
 
+      const data = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(data?.details || data?.error || `HTTP ${response.status}`);
       }
-
-      const data = await response.json();
 
       const {
         newState,
@@ -378,7 +432,11 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       }
     } catch (err) {
       console.error('Failed to send sales message', err);
-      toast({ title: "Chyba", description: "Správu sa nepodarilo odoslať. Skúste to znova.", variant: "destructive" });
+      toast({
+        title: "Chyba",
+        description: err?.message || "Správu sa nepodarilo odoslať. Skúste to znova.",
+        variant: "destructive",
+      });
     } finally {
       setIsSending(false);
       setIsTyping(false);
@@ -535,7 +593,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
                                 onClick={handleSendMessage}
                                 size="icon"
                                 className="rounded-full w-10 h-10 bg-slate-800 hover:bg-slate-900 text-white shadow"
-                                disabled={!voiceSessionId || creatingVoiceSession || !inputValue.trim() || isTyping || isSending}
+                                disabled={!activeSessionId || !isSessionReady || creatingVoiceSession || !inputValue.trim() || isTyping || isSending}
                             >
                                 <Send className="w-5 h-5" />
                             </Button>

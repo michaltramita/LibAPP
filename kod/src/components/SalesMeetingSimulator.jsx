@@ -5,15 +5,48 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Loader2 } from 'lucide-react';
 import { buildFinalFeedback } from '@/utils/salesSimulator'; // Import the main feedback builder
 
+const SALES_SESSION_STORAGE_KEY = 'sales_session_id';
+
+const readStoredSessionId = () => {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(SALES_SESSION_STORAGE_KEY);
+};
+
+const storeSessionId = (value) => {
+  if (typeof window === 'undefined') return;
+  if (!value) {
+    window.localStorage.removeItem(SALES_SESSION_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(SALES_SESSION_STORAGE_KEY, value);
+};
+
 const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
   const { user, session } = useAuth();
   const [sessionData, setSessionData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeSessionId, setActiveSessionId] = useState(() => sessionId || readStoredSessionId());
+
+  useEffect(() => {
+    if (sessionId && sessionId !== activeSessionId) {
+      setActiveSessionId(sessionId);
+      storeSessionId(sessionId);
+    }
+  }, [sessionId, activeSessionId]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      const stored = readStoredSessionId();
+      if (stored) {
+        setActiveSessionId(stored);
+      }
+    }
+  }, [activeSessionId]);
 
   useEffect(() => {
     const fetchSessionData = async () => {
-      if (!sessionId || !user) return;
+      if (!activeSessionId || !user) return;
       
       setLoading(true);
       setError(null);
@@ -22,7 +55,7 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
         const { data, error: fetchError } = await supabase
           .from('sessions')
           .select('*')
-          .eq('id', sessionId)
+          .eq('id', activeSessionId)
           .eq('user_id', user.id)
           .single();
 
@@ -44,10 +77,10 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
     };
 
     fetchSessionData();
-  }, [sessionId, user]);
+  }, [activeSessionId, user]);
 
   const handleEndSession = async (finalState, transcript) => {
-    if (!sessionId) {
+    if (!activeSessionId) {
       console.error("No active session to end.");
       if (onSessionComplete) onSessionComplete(null, sessionData?.module_code);
       return;
@@ -79,7 +112,7 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
       const { error: updateError } = await supabase
         .from('sessions')
         .update(updates)
-        .eq('id', sessionId);
+        .eq('id', activeSessionId);
 
       if (updateError) {
         console.error("Supabase update error:", updateError);
@@ -131,7 +164,7 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
     <MeetingInterface
       config={sessionConfig}
       onEndMeeting={handleEndSession}
-      sessionId={sessionId}
+      sessionId={activeSessionId}
       accessToken={session?.access_token}
     />
   );
