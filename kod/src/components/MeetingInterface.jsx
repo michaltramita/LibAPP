@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { 
-  Send, Mic, MicOff, User, Bot, PlayCircle, Search, Lightbulb, ThumbsDown, Award, Flag, CheckCircle, Volume2, BarChart2
+  Send, Mic, MicOff, User, Bot, Flag, Volume2
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { generateClientReply, getInitialMetrics, getInitialIntroFlags, getStartingMoodLevel } from '@/utils/salesSimulator';
+import { generateClientReply, getInitialMetrics, getInitialIntroFlags } from '@/utils/salesSimulator';
 import { cn } from '@/lib/utils';
 
 const SALES_SESSION_STORAGE_KEY = 'sales_session_id';
@@ -51,57 +51,6 @@ const isSalesDebugEnabled = () => {
   return window.localStorage.getItem(SALES_DEBUG_STORAGE_KEY) === '1';
 };
 
-const MetricsDashboard = ({ metrics }) => {
-    const metricItems = [
-        { label: 'Položené otázky', value: metrics.questionsAsked, target: 5 },
-        { label: 'Otvorené otázky', value: metrics.openQuestions, target: 3 },
-        { label: 'Identifikované potreby', value: metrics.needsIdentified, target: 2 },
-        { label: 'Hodnotové tvrdenia', value: metrics.valueStatements, target: 3 },
-        { label: 'Zvládanie námietok', value: `${metrics.objectionsHandledWell}/${metrics.objectionHandlingAttempts}`, isRatio: true },
-        { label: 'Pokusy o uzatvorenie', value: metrics.closingAttempts, target: 1 },
-        { label: 'Prispôsobenie (DISC)', value: metrics.adaptationToDISC, target: 3 },
-    ];
-
-    return (
-        <motion.div 
-            layout
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
-            className="w-72 bg-white/80 backdrop-blur-sm border border-slate-200/80 rounded-2xl p-4 shadow-lg"
-        >
-            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <BarChart2 className="w-5 h-5 text-[#B81547]" />
-                Metriky v reálnom čase
-            </h3>
-            <div className="space-y-3">
-                {metricItems.map(item => (
-                    <div key={item.label}>
-                        <div className="flex justify-between items-center text-xs mb-1">
-                            <span className="font-medium text-slate-600">{item.label}</span>
-                            <span className="font-bold text-slate-800">{item.isRatio ? item.value : `${item.value} / ${item.target}`}</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5">
-                             <motion.div
-                                className={cn(
-                                    "h-1.5 rounded-full",
-                                    item.isRatio 
-                                      ? (metrics.objectionsHandledWell > 0 && metrics.objectionsHandledWell === metrics.objectionHandlingAttempts ? 'bg-green-500' : 'bg-yellow-500')
-                                      : (item.value >= item.target ? 'bg-green-500' : 'bg-yellow-500')
-                                )}
-                                initial={{ width: 0 }}
-                                animate={{ width: item.isRatio ? `${(metrics.objectionsHandledWell / (metrics.objectionHandlingAttempts || 1)) * 100}%` : `${Math.min(100, (item.value / item.target) * 100)}%` }}
-                                transition={{ duration: 0.5 }}
-                            />
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </motion.div>
-    );
-};
-
-
 const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   // Debugging log as requested
   console.log("sessionConfig received in MeetingInterface:", config);
@@ -126,16 +75,12 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [showMetrics, setShowMetrics] = useState(true);
   const [creatingVoiceSession, setCreatingVoiceSession] = useState(false);
   const [appSessionId, setAppSessionId] = useState(
     () => routeSessionId || sessionId || readStoredSessionId()
   );
   const [voiceSessionId, setVoiceSessionId] = useState(() => readStoredVoiceSessionId());
   const [isSessionReady, setIsSessionReady] = useState(false);
-  const [lastSessionInitStatus, setLastSessionInitStatus] = useState(null);
-  const [lastSessionInitError, setLastSessionInitError] = useState(null);
-  const [lastSessionInitAt, setLastSessionInitAt] = useState(null);
 
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -216,17 +161,6 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     return phaseMap[normalized] || null;
   };
 
-  const phaseConfig = {
-    intro: { label: 'Úvod', icon: PlayCircle },
-    discovery: { label: 'Potreby', icon: Search },
-    presentation: { label: 'Ponuka', icon: Lightbulb },
-    objections: { label: 'Námietky', icon: ThumbsDown },
-    closing: { label: 'Uzatvorenie', icon: Award },
-    finished: { label: 'Hotovo', icon: Flag }
-  };
-  const phases = Object.keys(phaseConfig);
-  const activePhaseIndex = Math.max(phases.indexOf(sessionState.currentState), 0);
-
   useEffect(() => {
     if (isSalesDebugEnabled()) {
       console.info('[sales-ui] debug enabled');
@@ -290,9 +224,6 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
       }
       lastInitTargetRef.current = appSessionId;
       setCreatingVoiceSession(true);
-      setLastSessionInitAt(new Date().toISOString());
-      setLastSessionInitError(null);
-
       try {
         const controller = new AbortController();
         const timeoutId = window.setTimeout(() => controller.abort(), 10000);
@@ -313,8 +244,6 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
         }).finally(() => {
           window.clearTimeout(timeoutId);
         });
-        setLastSessionInitStatus(response.status);
-
         const data = await response.json().catch(() => null);
         if (!response.ok) {
           throw new Error(
@@ -333,7 +262,6 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
         return newVoiceSessionId;
       } catch (err) {
         const message = err?.name === 'AbortError' ? 'session init timeout' : err?.message;
-        setLastSessionInitError(message || null);
         console.error('Failed to initialize sales session', err);
         if (isMounted) {
           toast({
@@ -544,219 +472,144 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
     setSessionState(s => ({ ...s, currentState: 'finished' }));
     onEndMeeting(currentState, messages);
   };
-  
-  const getMoodConfig = (mood) => {
-    const map = {
-      positive: { label: 'Pozitívna', color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle, iconColor: 'text-green-500' },
-      neutral: { label: 'Neutrálna', color: 'bg-slate-100 text-slate-800 border-slate-200', icon: User, iconColor: 'text-slate-500' },
-      negative: { label: 'Negatívna', color: 'bg-red-100 text-red-800 border-red-200', icon: ThumbsDown, iconColor: 'text-red-500' },
-      interested: { label: 'Zaujatá', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: Lightbulb, iconColor: 'text-blue-500' },
-      skeptical: { label: 'Skeptická', color: 'bg-orange-100 text-orange-800 border-orange-200', icon: Search, iconColor: 'text-orange-500' }
-    };
-    return map[mood] || map['neutral'];
-  };
 
   const getLevelLabel = (val) => ({'beginner': 'Začiatočník', 'intermediate': 'Pokročilý', 'expert': 'Expert'})[val] || val;
-  const moodConfig = getMoodConfig(sessionState.clientMood);
 
   return (
-    <div className="flex h-screen bg-slate-50/50 font-sans relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://horizons-cdn.hostinger.com/c7c4800e-7b32-471c-852f-a05cb57f1e91/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]"></div>
-        
-        <div className="flex-1 flex flex-col p-4 sm:p-6 lg:p-8 overflow-hidden">
-            {/* Header */}
-            <header className="flex-shrink-0 z-10 mb-6">
-                <div className="flex justify-between items-start">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-800">Obchodná simulácia</h1>
-                        <p className="text-slate-500">{config.topic}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium bg-slate-200 text-slate-700 px-3 py-1 rounded-full">{getLevelLabel(config.difficulty)}</span>
-                        <span className="text-sm font-medium bg-red-100 text-red-800 px-3 py-1 rounded-full">{config.clientDiscType}</span>
-                    </div>
-                </div>
-            </header>
-
-            {/* Phase Tabs */}
-            <div className="flex items-center gap-2 mb-6 z-10">
-                {phases.map((p, index) => {
-                    const Icon = phaseConfig[p].icon;
-                    const isActive = activePhaseIndex === index;
-                    const isPassed = activePhaseIndex > index;
-                    return (
-                        <div key={p} className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all cursor-default",
-                            isActive ? "bg-[#B81547] text-white shadow-md" : 
-                            isPassed ? "bg-white text-green-600 border border-green-200" :
-                            "bg-white text-slate-400 border border-slate-200"
-                        )}>
-                            <Icon className={cn("w-4 h-4", isPassed && !isActive && "text-green-500")} />
-                            {phaseConfig[p].label}
-                        </div>
-                    );
-                })}
-            </div>
-            
-            {/* Chat Area */}
-            <main className="flex-1 overflow-y-auto pr-4 -mr-4 pb-48 z-10">
-                <div className="space-y-6 max-w-4xl mx-auto">
-                    {messages.map((message, index) => (
-                        <motion.div
-                            key={index}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className={cn("flex gap-4 items-start", message.type === 'salesman' ? 'justify-end' : 'justify-start')}
-                        >
-                            {message.type === 'client' && (
-                                <div className="w-10 h-10 rounded-full bg-orange-400 text-white flex items-center justify-center flex-shrink-0 border-2 border-white shadow-sm">
-                                    <Bot className="w-6 h-6" />
-                                </div>
-                            )}
-                            <div className={cn("max-w-[70%]", message.type === 'salesman' && 'flex flex-col items-end')}>
-                                <span className="text-xs text-slate-500 mb-1 px-1">{message.type === 'salesman' ? 'Obchodník' : 'Klient'}</span>
-                                <div className={cn("p-4 rounded-2xl relative group",
-                                    message.type === 'salesman'
-                                        ? 'bg-[#B81547] text-white rounded-tr-none'
-                                        : 'bg-white text-slate-800 shadow-sm border border-slate-100 rounded-tl-none'
-                                )}>
-                                    <p className="leading-relaxed text-sm">{message.text}</p>
-                                    {message.type === 'client' && (
-                                        <button onClick={() => speakText(message.text)} className="absolute -bottom-2 -right-2 bg-white rounded-full p-1 shadow border border-slate-100 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Volume2 className="w-3 h-3 text-slate-500" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                            {message.type === 'salesman' && (
-                                <div className="w-10 h-10 rounded-full bg-slate-700 text-white flex items-center justify-center flex-shrink-0 border-2 border-white shadow-sm">
-                                    <User className="w-6 h-6" />
-                                </div>
-                            )}
-                        </motion.div>
-                    ))}
-
-                    {isTyping && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4 items-start justify-start">
-                            <div className="w-10 h-10 rounded-full bg-orange-400 text-white flex items-center justify-center flex-shrink-0 border-2 border-white shadow-sm">
-                                <Bot className="w-6 h-6" />
-                            </div>
-                            <div>
-                                <span className="text-xs text-slate-500 mb-1 px-1">Klient</span>
-                                <div className="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-100">
-                                    <div className="flex gap-1.5">
-                                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                    </div>
-                                </div>
-                            </div>
-                        </motion.div>
-                    )}
-                    <div ref={messagesEndRef} />
-                </div>
-            </main>
-            
-            {isSalesDebugEnabled() && (
-              <div className="fixed top-4 left-4 z-50 max-h-[40vh] max-w-[420px] pointer-events-none">
-                <div className="pointer-events-auto overflow-y-auto p-3 text-xs bg-black/80 text-white rounded-lg font-mono">
-                  <div>appSessionId: {appSessionId ?? 'null'}</div>
-                  <div>voiceSessionId: {voiceSessionId ?? 'null'}</div>
-                  <div>routeSessionId: {routeSessionId ?? 'null'}</div>
-                  <div>propSessionId: {sessionId ?? 'null'}</div>
-                  <div>isSessionReady: {String(isSessionReady)}</div>
-                  <div>creatingVoiceSession: {String(creatingVoiceSession)}</div>
-                  <div>lastSessionInitStatus: {lastSessionInitStatus ?? 'null'}</div>
-                  <div>lastSessionInitError: {lastSessionInitError ?? 'null'}</div>
-                  <div>lastSessionInitAt: {lastSessionInitAt ?? 'null'}</div>
-                  <div>lastInitTargetRef: {lastInitTargetRef.current ?? 'null'}</div>
-                  <div>isTyping: {String(isTyping)}</div>
-                  <div>isSending: {String(isSending)}</div>
-                  <div>inputValue.length: {inputValue.length}</div>
-                  <div>inputValue.trim.length: {inputValue.trim().length}</div>
-                  <div>hasAccessToken: {String(!!accessToken)}</div>
-                </div>
-              </div>
-            )}
-
-            {/* Input Area */}
-            <footer className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 lg:p-8 bg-transparent z-30">
-                <div className="max-w-4xl mx-auto">
-                    <div className="relative bg-white rounded-xl shadow-lg border border-slate-200">
-                        <textarea
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    handleSendMessage();
-                                }
-                            }}
-                            placeholder={isListening ? "Počúvam, hovorte..." : "Napíšte alebo nahrajte svoju odpoveď..."}
-                            className="w-full pl-6 pr-28 py-4 bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none resize-none"
-                            disabled={isTyping || isSending}
-                            rows={1}
-                        />
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                            <Button
-                                onClick={toggleListening}
-                                variant="ghost"
-                                size="icon"
-                                className={cn("rounded-full w-10 h-10", isListening ? 'bg-red-100 text-red-600' : 'text-slate-500 hover:bg-slate-100')}
-                            >
-                                {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                            </Button>
-                            <Button
-                                onClick={handleSendMessage}
-                                size="icon"
-                                className="rounded-full w-10 h-10 bg-slate-800 hover:bg-slate-900 text-white shadow"
-                                disabled={!voiceSessionId || !isSessionReady || creatingVoiceSession || !inputValue.trim() || isTyping || isSending}
-                            >
-                                <Send className="w-5 h-5" />
-                            </Button>
-                        </div>
-                    </div>
-                    <div className="flex justify-between items-center mt-2 px-2">
-                        <p className="text-xs text-slate-400">Enter pre odoslanie, Shift+Enter pre nový riadok</p>
-                        <Button variant="link" size="sm" className="text-slate-500 text-xs" onClick={() => handleEndMeeting()}>
-                            <Flag className="w-3 h-3 mr-1.5" /> Ukončiť a hodnotiť
-                        </Button>
-                    </div>
-                </div>
-            </footer>
-        </div>
-        
-        {/* Right Sidebar */}
-        <div className="relative p-4 sm:p-6 lg:p-8 flex-shrink-0 z-20">
-            <AnimatePresence>
-                {showMetrics ? (
-                    <div className="flex flex-col gap-6">
-                        <motion.div 
-                            layout 
-                            className={cn("w-72 p-3 rounded-2xl shadow-lg border", moodConfig.color)}
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0", moodConfig.iconColor, moodConfig.color.replace('bg-','bg-opacity-50 '))} >
-                                   <moodConfig.icon className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <p className="font-bold text-sm">{moodConfig.label}</p>
-                                    <p className="text-xs">{sessionState.clientMoodReason}</p>
-                                </div>
-                            </div>
-                        </motion.div>
-
-                        <MetricsDashboard metrics={sessionState.metrics} />
-                    </div>
-                ) : (
-                    <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                         <Button variant="outline" size="icon" onClick={() => setShowMetrics(true)} className="bg-white/80 backdrop-blur-sm">
-                            <BarChart2 className="w-5 h-5" />
-                        </Button>
-                    </motion.div>
+    <div className="flex h-screen bg-slate-100 font-sans">
+      <div className="flex w-full items-center justify-center p-4 sm:p-6">
+        <div className="flex h-full w-full max-w-[520px] flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-slate-50 shadow-xl">
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h1 className="text-lg font-semibold text-slate-800">Obchodná simulácia</h1>
+                {config.topic && (
+                  <p className="text-xs text-slate-500">{config.topic}</p>
                 )}
-            </AnimatePresence>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs text-slate-500 hover:text-slate-700"
+                onClick={() => handleEndMeeting()}
+              >
+                <Flag className="mr-1 h-3.5 w-3.5" /> Ukončiť
+              </Button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-full bg-slate-200 px-2.5 py-1 font-medium text-slate-700">
+                {getLevelLabel(config.difficulty)}
+              </span>
+              {config.clientType && (
+                <span className="rounded-full bg-white px-2.5 py-1 font-medium text-slate-600 ring-1 ring-slate-200">
+                  {config.clientType}
+                </span>
+              )}
+              {config.clientDiscType && (
+                <span className="rounded-full bg-red-100 px-2.5 py-1 font-medium text-red-700">
+                  {config.clientDiscType}
+                </span>
+              )}
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-y-auto px-4 py-5">
+            <div className="space-y-4">
+              {messages.map((message, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={cn("flex gap-3 items-end", message.type === 'salesman' ? 'justify-end' : 'justify-start')}
+                >
+                  {message.type === 'client' && (
+                    <div className="w-9 h-9 rounded-full bg-orange-400 text-white flex items-center justify-center flex-shrink-0 border-2 border-white shadow-sm">
+                      <Bot className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div className={cn("max-w-[78%]", message.type === 'salesman' && 'flex flex-col items-end')}>
+                    <span className="text-[11px] text-slate-400 mb-1 px-1">{message.type === 'salesman' ? 'Obchodník' : 'Klient'}</span>
+                    <div className={cn("p-3 rounded-2xl relative group shadow-sm",
+                      message.type === 'salesman'
+                        ? 'bg-[#B81547] text-white rounded-tr-none'
+                        : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
+                    )}>
+                      <p className="leading-relaxed text-sm">{message.text}</p>
+                      {message.type === 'client' && (
+                        <button onClick={() => speakText(message.text)} className="absolute -bottom-2 -right-2 bg-white rounded-full p-1 shadow border border-slate-100 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Volume2 className="w-3 h-3 text-slate-500" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {message.type === 'salesman' && (
+                    <div className="w-9 h-9 rounded-full bg-slate-700 text-white flex items-center justify-center flex-shrink-0 border-2 border-white shadow-sm">
+                      <User className="w-5 h-5" />
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+
+              {isTyping && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3 items-end justify-start">
+                  <div className="w-9 h-9 rounded-full bg-orange-400 text-white flex items-center justify-center flex-shrink-0 border-2 border-white shadow-sm">
+                    <Bot className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-400 mb-1 px-1">Klient</span>
+                    <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-slate-100">
+                      <div className="flex gap-1.5">
+                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </main>
+
+          <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+            <div className="relative rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+              <textarea
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                placeholder={isListening ? "Počúvam, hovorte..." : "Napíšte alebo nahrajte svoju odpoveď..."}
+                className="w-full pl-2 pr-24 py-2 bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none resize-none text-sm"
+                disabled={isTyping || isSending}
+                rows={1}
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                <Button
+                  onClick={toggleListening}
+                  variant="ghost"
+                  size="icon"
+                  className={cn("rounded-full w-9 h-9", isListening ? 'bg-red-100 text-red-600' : 'text-slate-500 hover:bg-slate-100')}
+                >
+                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
+                <Button
+                  onClick={handleSendMessage}
+                  size="icon"
+                  className="rounded-full w-9 h-9 bg-slate-800 hover:bg-slate-900 text-white shadow"
+                  disabled={!voiceSessionId || !isSessionReady || creatingVoiceSession || !inputValue.trim() || isTyping || isSending}
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-400">Enter pre odoslanie, Shift+Enter pre nový riadok</p>
+          </footer>
         </div>
+      </div>
     </div>
   );
 };
