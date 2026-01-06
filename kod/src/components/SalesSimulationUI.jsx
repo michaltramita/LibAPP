@@ -1,0 +1,303 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+
+const SALES_VOICE_SESSION_STORAGE_KEY = 'sales_voice_session_id';
+
+const readStoredVoiceSessionId = () => {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(SALES_VOICE_SESSION_STORAGE_KEY);
+};
+
+const storeVoiceSessionId = (value) => {
+  if (typeof window === 'undefined') return;
+  if (!value) {
+    window.localStorage.removeItem(SALES_VOICE_SESSION_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(SALES_VOICE_SESSION_STORAGE_KEY, value);
+};
+
+const DIFFICULTY_LABELS = {
+  beginner: 'Začiatočník',
+  intermediate: 'Pokročilý',
+  expert: 'Expert',
+};
+
+const CLIENT_TYPE_LABELS = {
+  new: 'Nový klient',
+  existing: 'Existujúci klient',
+};
+
+const DISC_COLORS = {
+  D: 'bg-red-500',
+  I: 'bg-yellow-400',
+  S: 'bg-green-500',
+  C: 'bg-blue-500',
+};
+
+const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => {
+  const [appSessionId, setAppSessionId] = useState(sessionId || null);
+  const [voiceSessionId, setVoiceSessionId] = useState(() => readStoredVoiceSessionId());
+  const [messages, setMessages] = useState([]);
+  const [inputValue, setInputValue] = useState('');
+  const [isInitializing, setIsInitializing] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  const initStartedRef = useRef({});
+  const messagesRef = useRef(messages);
+  const listEndRef = useRef(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    if (sessionId && sessionId !== appSessionId) {
+      setAppSessionId(sessionId);
+    }
+  }, [sessionId, appSessionId]);
+
+  useEffect(() => {
+    listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const initializeVoiceSession = useCallback(async () => {
+    if (!accessToken || !appSessionId) return;
+    if (voiceSessionId) return;
+    if (initStartedRef.current[appSessionId]) return;
+
+    initStartedRef.current[appSessionId] = true;
+    setIsInitializing(true);
+    setErrorMessage(null);
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch('/api/sales/session', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          session_id: appSessionId,
+          module: 'obchodny_rozhovor',
+          difficulty: config?.difficulty,
+          client_type: config?.clientType,
+          client_disc_type: config?.clientDiscType,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Nepodarilo sa inicializovať reláciu.');
+      }
+
+      const createdSessionId = data?.session_id || data?.sessionId || data?.id;
+      if (!createdSessionId) {
+        throw new Error('Chýba identifikátor hlasovej relácie.');
+      }
+
+      setVoiceSessionId(createdSessionId);
+      storeVoiceSessionId(createdSessionId);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error?.message || 'Nepodarilo sa inicializovať reláciu.');
+    } finally {
+      window.clearTimeout(timeoutId);
+      setIsInitializing(false);
+    }
+  }, [accessToken, appSessionId, config, voiceSessionId]);
+
+  useEffect(() => {
+    initializeVoiceSession();
+  }, [initializeVoiceSession]);
+
+  const canSend = Boolean(
+    accessToken &&
+      voiceSessionId &&
+      inputValue.trim().length > 0 &&
+      !isSending &&
+      !isInitializing
+  );
+
+  const handleSend = async () => {
+    if (!canSend) return;
+
+    const nextContent = inputValue.trim();
+    const timestamp = new Date().toISOString();
+    setInputValue('');
+    setIsSending(true);
+    setErrorMessage(null);
+    setMessages((prev) => [
+      ...prev,
+      { type: 'salesman', text: nextContent, timestamp },
+    ]);
+
+    try {
+      const response = await fetch('/api/sales/message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          session_id: voiceSessionId,
+          role: 'salesman',
+          content: nextContent,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || 'Nepodarilo sa odoslať správu.');
+      }
+
+      const reply = data?.client_message || data?.reply || data?.message;
+      if (reply) {
+        setMessages((prev) => [
+          ...prev,
+          { type: 'client', text: reply, timestamp: new Date().toISOString() },
+        ]);
+      }
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error?.message || 'Nepodarilo sa odoslať správu.');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleInputKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleResetSession = () => {
+    storeVoiceSessionId(null);
+    setVoiceSessionId(null);
+    setErrorMessage(null);
+    setIsInitializing(false);
+    if (appSessionId) {
+      delete initStartedRef.current[appSessionId];
+    }
+  };
+
+  const handleEndMeeting = () => {
+    if (onEndMeeting) {
+      onEndMeeting(
+        { currentState: 'finished', metrics: {} },
+        messagesRef.current
+      );
+    }
+  };
+
+  const discValue = (config?.clientDiscType || '').toString().toUpperCase();
+  const discColor = DISC_COLORS[discValue] || 'bg-slate-400';
+  const difficultyLabel = DIFFICULTY_LABELS[config?.difficulty] || config?.difficulty || '—';
+  const clientTypeLabel = CLIENT_TYPE_LABELS[config?.clientType] || config?.clientType || '—';
+
+  return (
+    <div className="flex min-h-screen w-full items-center justify-center bg-slate-100 px-4 py-8">
+      <div className="flex h-full w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
+        <header className="border-b border-slate-200 bg-white px-4 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-semibold text-slate-900">Obchodná simulácia</h1>
+              <p className="text-sm text-slate-500">{config?.topic || 'Téma nie je zadaná'}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleEndMeeting}
+              className="rounded-full bg-[#B81547] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#a0123d]"
+            >
+              Ukončiť / hodnotiť
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              {difficultyLabel}
+            </span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              {clientTypeLabel}
+            </span>
+            <span className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-white ${discColor}`}>
+              {discValue || 'DISC'}
+            </span>
+            {isInitializing && (
+              <span className="text-xs font-medium text-slate-500">Initializing…</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleResetSession}
+            className="mt-3 text-xs font-semibold text-slate-500 transition hover:text-slate-700"
+          >
+            Reset session
+          </button>
+        </header>
+
+        {errorMessage && (
+          <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+          {messages.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
+              Správy sa zobrazia tu po prvom odoslaní.
+            </div>
+          )}
+          {messages.map((message, index) => {
+            const isSalesman = message.type === 'salesman';
+            return (
+              <div
+                key={`${message.timestamp}-${index}`}
+                className={`flex ${isSalesman ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                    isSalesman
+                      ? 'bg-[#B81547] text-white'
+                      : 'bg-slate-100 text-slate-800'
+                  }`}
+                >
+                  {message.text}
+                </div>
+              </div>
+            );
+          })}
+          <div ref={listEndRef} />
+        </div>
+
+        <div className="border-t border-slate-200 bg-white px-4 py-3">
+          <div className="flex items-end gap-2">
+            <textarea
+              value={inputValue}
+              onChange={(event) => setInputValue(event.target.value)}
+              onKeyDown={handleInputKeyDown}
+              rows={2}
+              placeholder="Napíšte správu..."
+              className="flex-1 resize-none rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#B81547] focus:outline-none focus:ring-1 focus:ring-[#B81547]"
+            />
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!canSend}
+              className="rounded-2xl bg-[#B81547] px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              Odoslať
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default SalesSimulationUI;

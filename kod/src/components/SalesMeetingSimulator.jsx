@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
-import MeetingInterface from '@/components/MeetingInterface';
-import SalesSimV1 from '@/components/SalesSimV1';
+import SalesSimulationUI from '@/components/SalesSimulationUI';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Loader2 } from 'lucide-react';
@@ -24,7 +22,6 @@ const storeSessionId = (value) => {
 };
 
 const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
-  const location = useLocation();
   const { user, session } = useAuth();
   const [sessionData, setSessionData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -163,25 +160,13 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
     salesmanLevel: user?.user_metadata?.experience_level || 'beginner'
   };
 
-  const searchParams = new URLSearchParams(location.search);
-  const isV1Mode = searchParams.get('sim') === 'v1';
-
   return (
-    isV1Mode ? (
-      <SalesSimV1
-        config={sessionConfig}
-        onEndMeeting={handleEndSession}
-        sessionId={activeSessionId}
-        accessToken={session?.access_token}
-      />
-    ) : (
-      <MeetingInterface
-        config={sessionConfig}
-        onEndMeeting={handleEndSession}
-        sessionId={activeSessionId}
-        accessToken={session?.access_token}
-      />
-    )
+    <SalesSimulationUI
+      config={sessionConfig}
+      onEndMeeting={handleEndSession}
+      sessionId={activeSessionId}
+      accessToken={session?.access_token}
+    />
   );
 };
 
