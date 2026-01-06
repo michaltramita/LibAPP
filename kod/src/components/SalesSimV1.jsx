@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { Award, Target, User } from 'lucide-react';
 
 const SALES_SESSION_STORAGE_KEY = 'sales_session_id';
 const SALES_VOICE_SESSION_STORAGE_KEY = 'sales_voice_session_id';
@@ -43,6 +44,50 @@ const fetchWithTimeout = async (url, options = {}) => {
     clearTimeout(timeoutId);
   }
 };
+
+const badgeVariants = {
+  difficulty:
+    'from-sky-50/80 via-white/70 to-white/50 text-slate-700',
+  client:
+    'from-emerald-50/80 via-white/70 to-white/50 text-emerald-800',
+  disc:
+    'from-white/80 via-white/70 to-white/50 text-slate-700',
+};
+
+const discToneStyles = {
+  D: {
+    badge: 'from-rose-50/80 via-white/70 to-white/50 text-rose-700',
+    dot: 'bg-rose-500',
+  },
+  I: {
+    badge: 'from-violet-50/80 via-white/70 to-white/50 text-violet-700',
+    dot: 'bg-violet-500',
+  },
+  S: {
+    badge: 'from-sky-50/80 via-white/70 to-white/50 text-sky-700',
+    dot: 'bg-sky-500',
+  },
+  C: {
+    badge: 'from-amber-50/80 via-white/70 to-white/50 text-amber-700',
+    dot: 'bg-amber-500',
+  },
+};
+
+const SimBadge = ({ label, icon: Icon, variant, dot, dotClassName = '', className = '' }) => (
+  <div
+    className={`inline-flex items-center gap-2 rounded-full border border-white/40 bg-gradient-to-r px-3 py-1 text-sm font-medium shadow-md transition hover:shadow-lg ${badgeVariants[variant] || badgeVariants.difficulty} ${className} backdrop-blur-sm`}
+  >
+    {dot ? (
+      <span
+        className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold text-white ${dotClassName}`}
+      >
+        {dot}
+      </span>
+    ) : null}
+    {Icon ? <Icon className="h-4 w-4" /> : null}
+    <span>{label}</span>
+  </div>
+);
 
 const SalesSimV1 = ({ config, sessionId, accessToken }) => {
   const { sessionId: routeSessionId } = useParams();
@@ -192,6 +237,24 @@ const SalesSimV1 = ({ config, sessionId, accessToken }) => {
       !isSending
   );
 
+  const difficultyLabelMap = {
+    beginner: 'Začiatočník',
+    intermediate: 'Pokročilý',
+    expert: 'Expert',
+  };
+
+  const clientTypeLabelMap = {
+    new: 'Nový klient',
+    existing: 'Existujúci klient',
+  };
+
+  const difficultyLabel =
+    difficultyLabelMap[config?.difficulty] || config?.difficulty || 'Neurčené';
+  const clientTypeLabel =
+    clientTypeLabelMap[config?.clientType] || config?.clientType || 'Neurčené';
+  const discLetter = (config?.clientDiscType || '').toUpperCase();
+  const discTone = discToneStyles[discLetter] || discToneStyles.D;
+
   return (
     <div className="flex h-screen w-full flex-col bg-slate-50">
       <header className="border-b border-slate-200 bg-white px-6 py-4">
@@ -199,6 +262,26 @@ const SalesSimV1 = ({ config, sessionId, accessToken }) => {
           <div>
             <h1 className="text-lg font-semibold text-slate-900">Sales Simulation (V1)</h1>
             <p className="text-sm text-slate-500">Minimal stabilný režim na testovanie.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <SimBadge
+                label={difficultyLabel}
+                icon={Award}
+                variant="difficulty"
+              />
+              <SimBadge
+                label={clientTypeLabel}
+                icon={User}
+                variant="client"
+              />
+              <SimBadge
+                label={`DISC: ${discLetter || 'D'}`}
+                icon={Target}
+                variant="disc"
+                dot={discLetter || 'D'}
+                dotClassName={discTone.dot}
+                className={discTone.badge}
+              />
+            </div>
           </div>
           <button
             type="button"
