@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Award, Target, User } from 'lucide-react';
+import { Award, Send, Target, User } from 'lucide-react';
 
 const SALES_SESSION_STORAGE_KEY = 'sales_session_id';
 const SALES_VOICE_SESSION_STORAGE_KEY = 'sales_voice_session_id';
@@ -89,7 +89,7 @@ const SimBadge = ({ label, icon: Icon, variant, dot, dotClassName = '', classNam
   </div>
 );
 
-const SalesSimV1 = ({ config, sessionId, accessToken }) => {
+const SalesSimV1 = ({ config, sessionId, accessToken, onEndMeeting }) => {
   const { sessionId: routeSessionId } = useParams();
   const [appSessionId, setAppSessionId] = useState(
     () => routeSessionId || sessionId || readStoredSessionId()
@@ -237,6 +237,12 @@ const SalesSimV1 = ({ config, sessionId, accessToken }) => {
       !isSending
   );
 
+  const handleEndMeeting = () => {
+    if (onEndMeeting) {
+      onEndMeeting();
+    }
+  };
+
   const difficultyLabelMap = {
     beginner: 'Začiatočník',
     intermediate: 'Pokročilý',
@@ -256,115 +262,137 @@ const SalesSimV1 = ({ config, sessionId, accessToken }) => {
   const discTone = discToneStyles[discLetter] || discToneStyles.D;
 
   return (
-    <div className="min-h-screen w-full bg-slate-50">
-      <div className="flex h-screen flex-col">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur">
-          <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h1 className="text-lg font-semibold text-slate-900">Obchodná simulácia</h1>
-                <p className="text-sm text-slate-500">CRM</p>
-              </div>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="text-sm font-medium text-slate-500 hover:text-slate-700"
-              >
-                Ukončiť / hodnotiť
-              </button>
+    <div className="flex h-[100dvh] min-h-screen w-full flex-col bg-slate-50">
+      <header className="sticky top-0 z-20 w-full border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="w-full px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-semibold text-slate-900">Obchodná simulácia</h1>
+              <p className="text-sm text-slate-500">
+                {config?.topic || 'Téma nie je zadaná'}
+              </p>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <SimBadge
-                label={difficultyLabel}
-                icon={Award}
-                variant="difficulty"
-              />
-              <SimBadge
-                label={clientTypeLabel}
-                icon={User}
-                variant="client"
-              />
-              <SimBadge
-                label={`DISC: ${discLetter || 'D'}`}
-                icon={Target}
-                variant="disc"
-                dot={discLetter || 'D'}
-                dotClassName={discTone.dot}
-                className={discTone.badge}
-              />
-            </div>
+            <button
+              type="button"
+              onClick={handleEndMeeting}
+              className="text-sm font-semibold text-[#B81547] transition hover:text-[#a0123c]"
+            >
+              Ukončiť / hodnotiť
+            </button>
           </div>
-        </header>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <SimBadge
+              label={difficultyLabel}
+              icon={Award}
+              variant="difficulty"
+            />
+            <SimBadge
+              label={clientTypeLabel}
+              icon={User}
+              variant="client"
+            />
+            <SimBadge
+              label={`DISC: ${discLetter || 'D'}`}
+              icon={Target}
+              variant="disc"
+              dot={discLetter || 'D'}
+              dotClassName={discTone.dot}
+              className={discTone.badge}
+            />
+          </div>
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-xs font-semibold text-slate-400 transition hover:text-slate-600"
+            >
+              Reset session
+            </button>
+          </div>
+        </div>
+      </header>
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-4 py-4 pb-28 sm:px-6">
-            {errorMessage && (
-              <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-                {errorMessage}
+      <main className="flex-1 overflow-y-auto">
+        <div className="w-full px-4 py-4 pb-28 sm:px-6 lg:px-8">
+          {errorMessage && (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {isInitializing && (
+              <div className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">
+                Inicializujem hlasovú reláciu…
               </div>
             )}
 
-            <div className="space-y-4">
-              {isInitializing && (
-                <div className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">
-                  Inicializujem hlasovú reláciu…
-                </div>
-              )}
+            {messages.length === 0 && !isInitializing && (
+              <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-400">
+                Zatiaľ žiadne správy.
+              </div>
+            )}
 
-              {messages.length === 0 && !isInitializing && (
-                <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-400">
-                  Zatiaľ žiadne správy.
-                </div>
-              )}
-
-              {messages.map((message, index) => (
+            {messages.map((message, index) => (
+              <div
+                key={`${message.role}-${index}`}
+                className={
+                  message.role === 'salesman'
+                    ? 'ml-auto flex w-full max-w-[85%] flex-col items-end gap-1 sm:max-w-[70%]'
+                    : 'mr-auto flex w-full max-w-[85%] flex-col items-start gap-1 sm:max-w-[70%]'
+                }
+              >
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  {message.role === 'salesman' ? 'Predajca' : 'Klient'}
+                </span>
                 <div
-                  key={`${message.role}-${index}`}
                   className={
                     message.role === 'salesman'
-                      ? 'ml-auto w-fit max-w-[85%] rounded-lg bg-[#B81547] px-3 py-2 text-sm text-white sm:max-w-[70%]'
-                      : 'mr-auto w-fit max-w-[85%] rounded-lg bg-white px-3 py-2 text-sm text-slate-700 shadow-sm sm:max-w-[70%]'
+                      ? 'w-fit rounded-2xl bg-[#B81547] px-4 py-2 text-sm text-white shadow-sm'
+                      : 'w-fit rounded-2xl bg-white px-4 py-2 text-sm text-slate-700 shadow-sm'
                   }
                 >
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-70">
-                    {message.role === 'salesman' ? 'Predajca' : 'Klient'}
-                  </p>
-                  <p>{message.content}</p>
+                  {message.content}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        </main>
+        </div>
+      </main>
 
-        <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur">
-          <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
-            <div className="flex items-end gap-3">
-              <textarea
-                className="min-h-[64px] flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-[#B81547] focus:outline-none"
-                placeholder="Napíšte správu klientovi..."
-                value={inputValue}
-                onChange={(event) => setInputValue(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    handleSend();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={!canSend}
-                className={`rounded-md px-4 py-2 text-sm font-semibold text-white transition ${
-                  canSend ? 'bg-[#B81547] hover:bg-[#a0123c]' : 'cursor-not-allowed bg-slate-300'
-                }`}
-              >
-                {isSending ? 'Odosielam...' : 'Send'}
-              </button>
-            </div>
+      <footer className="sticky bottom-0 z-20 w-full border-t border-slate-200 bg-white/95 backdrop-blur">
+        <div className="w-full px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex items-end gap-3">
+            <textarea
+              className="min-h-[64px] flex-1 resize-none rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-[#B81547] focus:outline-none focus:ring-1 focus:ring-[#B81547]"
+              placeholder="Napíšte správu klientovi..."
+              value={inputValue}
+              onChange={(event) => setInputValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!canSend}
+              className={`flex h-12 w-12 items-center justify-center rounded-full text-white transition ${
+                canSend ? 'bg-[#B81547] hover:bg-[#a0123c]' : 'cursor-not-allowed bg-slate-300'
+              }`}
+              aria-label="Odoslať správu"
+            >
+              {isSending ? (
+                <span className="text-xs font-semibold">...</span>
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+            </button>
           </div>
-        </footer>
-      </div>
+        </div>
+      </footer>
     </div>
   );
 };
