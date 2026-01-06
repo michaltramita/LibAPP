@@ -131,6 +131,7 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
     setInputValue('');
     setIsSending(true);
     setErrorMessage(null);
+
     setMessages((prev) => [
       ...prev,
       { type: 'salesman', text: nextContent, timestamp },
@@ -189,10 +190,7 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
 
   const handleEndMeeting = () => {
     if (onEndMeeting) {
-      onEndMeeting(
-        { currentState: 'finished', metrics: {} },
-        messagesRef.current
-      );
+      onEndMeeting({ currentState: 'finished', metrics: {} }, messagesRef.current);
     }
   };
 
@@ -202,98 +200,116 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
   const clientTypeLabel = CLIENT_TYPE_LABELS[config?.clientType] || config?.clientType || '—';
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-slate-100 px-4 py-8">
-      <div className="flex h-full w-full max-w-[480px] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
-        <header className="border-b border-slate-200 bg-white px-4 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-lg font-semibold text-slate-900">Obchodná simulácia</h1>
-              <p className="text-sm text-slate-500">{config?.topic || 'Téma nie je zadaná'}</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleEndMeeting}
-              className="rounded-full bg-[#B81547] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#a0123d]"
-            >
-              Ukončiť / hodnotiť
-            </button>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-              {difficultyLabel}
-            </span>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-              {clientTypeLabel}
-            </span>
-            <span className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-white ${discColor}`}>
-              {discValue || 'DISC'}
-            </span>
-            {isInitializing && (
-              <span className="text-xs font-medium text-slate-500">Initializing…</span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={handleResetSession}
-            className="mt-3 text-xs font-semibold text-slate-500 transition hover:text-slate-700"
-          >
-            Reset session
-          </button>
-        </header>
-
-        {errorMessage && (
-          <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
-            {errorMessage}
-          </div>
-        )}
-
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-          {messages.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
-              Správy sa zobrazia tu po prvom odoslaní.
-            </div>
-          )}
-          {messages.map((message, index) => {
-            const isSalesman = message.type === 'salesman';
-            return (
-              <div
-                key={`${message.timestamp}-${index}`}
-                className={`flex ${isSalesman ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
-                    isSalesman
-                      ? 'bg-[#B81547] text-white'
-                      : 'bg-slate-100 text-slate-800'
-                  }`}
-                >
-                  {message.text}
+    <div className="w-full bg-slate-100">
+      {/* Full-screen layout (mobile safe) */}
+      <div className="h-[100dvh] w-full">
+        {/* Container: full width, optional comfortable padding on desktop */}
+        <div className="mx-auto flex h-full w-full max-w-none flex-col bg-white shadow-none sm:max-w-5xl sm:rounded-3xl sm:border sm:border-slate-200 sm:shadow-xl">
+          {/* Header sticky */}
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+            <div className="px-4 py-4 sm:px-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-lg font-semibold text-slate-900">Obchodná simulácia</h1>
+                  <p className="text-sm text-slate-500">{config?.topic || 'Téma nie je zadaná'}</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleEndMeeting}
+                  className="rounded-full bg-[#B81547] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#a0123d]"
+                >
+                  Ukončiť / hodnotiť
+                </button>
               </div>
-            );
-          })}
-          <div ref={listEndRef} />
-        </div>
 
-        <div className="border-t border-slate-200 bg-white px-4 py-3">
-          <div className="flex items-end gap-2">
-            <textarea
-              value={inputValue}
-              onChange={(event) => setInputValue(event.target.value)}
-              onKeyDown={handleInputKeyDown}
-              rows={2}
-              placeholder="Napíšte správu..."
-              className="flex-1 resize-none rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#B81547] focus:outline-none focus:ring-1 focus:ring-[#B81547]"
-            />
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!canSend}
-              className="rounded-2xl bg-[#B81547] px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              Odoslať
-            </button>
-          </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {difficultyLabel}
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {clientTypeLabel}
+                </span>
+                <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-semibold text-white ${discColor}`}>
+                  <span className="inline-block h-2 w-2 rounded-full bg-white/90" />
+                  {discValue || 'DISC'}
+                </span>
+                {isInitializing && (
+                  <span className="text-xs font-medium text-slate-500">Initializing…</span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetSession}
+                className="mt-3 text-xs font-semibold text-slate-500 transition hover:text-slate-700"
+              >
+                Reset session
+              </button>
+            </div>
+
+            {errorMessage && (
+              <div className="border-t border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 sm:px-6">
+                {errorMessage}
+              </div>
+            )}
+          </header>
+
+          {/* Chat */}
+          <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+            {messages.length === 0 && (
+              <div className="mx-auto max-w-2xl rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
+                Správy sa zobrazia tu po prvom odoslaní.
+              </div>
+            )}
+
+            <div className="mx-auto w-full max-w-3xl space-y-3">
+              {messages.map((message, index) => {
+                const isSalesman = message.type === 'salesman';
+                return (
+                  <div
+                    key={`${message.timestamp}-${index}`}
+                    className={`flex ${isSalesman ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm sm:max-w-[70%] ${
+                        isSalesman ? 'bg-[#B81547] text-white' : 'bg-slate-100 text-slate-800'
+                      }`}
+                    >
+                      {message.text}
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={listEndRef} />
+            </div>
+          </main>
+
+          {/* Input sticky bottom */}
+          <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur">
+            <div className="px-4 py-3 sm:px-6">
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={inputValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  rows={2}
+                  placeholder="Napíšte správu..."
+                  className="flex-1 resize-none rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#B81547] focus:outline-none focus:ring-1 focus:ring-[#B81547]"
+                />
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!canSend}
+                  className="rounded-2xl bg-[#B81547] px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {isSending ? 'Odosielam…' : 'Odoslať'}
+                </button>
+              </div>
+              <div className="mt-2 text-xs text-slate-400">
+                Enter odošle, Shift+Enter nový riadok
+              </div>
+            </div>
+          </footer>
         </div>
       </div>
     </div>
