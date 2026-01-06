@@ -256,12 +256,23 @@ const SalesSimV1 = ({ config, sessionId, accessToken }) => {
   const discTone = discToneStyles[discLetter] || discToneStyles.D;
 
   return (
-    <div className="flex h-screen w-full flex-col bg-slate-50">
-      <header className="border-b border-slate-200 bg-white px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-slate-900">Sales Simulation (V1)</h1>
-            <p className="text-sm text-slate-500">Minimal stabilný režim na testovanie.</p>
+    <div className="min-h-screen w-full bg-slate-50">
+      <div className="flex h-screen flex-col">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur">
+          <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h1 className="text-lg font-semibold text-slate-900">Obchodná simulácia</h1>
+                <p className="text-sm text-slate-500">CRM</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="text-sm font-medium text-slate-500 hover:text-slate-700"
+              >
+                Ukončiť / hodnotiť
+              </button>
+            </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <SimBadge
                 label={difficultyLabel}
@@ -283,70 +294,77 @@ const SalesSimV1 = ({ config, sessionId, accessToken }) => {
               />
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="text-xs font-medium text-slate-500 hover:text-slate-700"
-          >
-            Reset V1 session
-          </button>
-        </div>
-      </header>
+        </header>
 
-      {errorMessage && (
-        <div className="mx-6 mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          {errorMessage}
-        </div>
-      )}
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-3xl px-4 py-4 pb-28 sm:px-6">
+            {errorMessage && (
+              <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                {errorMessage}
+              </div>
+            )}
 
-      <main className="flex flex-1 flex-col overflow-hidden px-6 py-4">
-        <div className="flex-1 space-y-4 overflow-y-auto rounded-md border border-slate-200 bg-white p-4">
-          {isInitializing && (
-            <div className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">
-              Inicializujem hlasovú reláciu…
+            <div className="space-y-4">
+              {isInitializing && (
+                <div className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">
+                  Inicializujem hlasovú reláciu…
+                </div>
+              )}
+
+              {messages.length === 0 && !isInitializing && (
+                <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-400">
+                  Zatiaľ žiadne správy.
+                </div>
+              )}
+
+              {messages.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={
+                    message.role === 'salesman'
+                      ? 'ml-auto w-fit max-w-[85%] rounded-lg bg-[#B81547] px-3 py-2 text-sm text-white sm:max-w-[70%]'
+                      : 'mr-auto w-fit max-w-[85%] rounded-lg bg-white px-3 py-2 text-sm text-slate-700 shadow-sm sm:max-w-[70%]'
+                  }
+                >
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-70">
+                    {message.role === 'salesman' ? 'Predajca' : 'Klient'}
+                  </p>
+                  <p>{message.content}</p>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
+        </main>
 
-          {messages.length === 0 && !isInitializing && (
-            <div className="text-sm text-slate-400">Zatiaľ žiadne správy.</div>
-          )}
-
-          {messages.map((message, index) => (
-            <div
-              key={`${message.role}-${index}`}
-              className={
-                message.role === 'salesman'
-                  ? 'ml-auto w-fit max-w-[80%] rounded-lg bg-[#B81547] px-3 py-2 text-sm text-white'
-                  : 'mr-auto w-fit max-w-[80%] rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700'
-              }
-            >
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide opacity-70">
-                {message.role === 'salesman' ? 'Predajca' : 'Klient'}
-              </p>
-              <p>{message.content}</p>
+        <footer className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur">
+          <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6">
+            <div className="flex items-end gap-3">
+              <textarea
+                className="min-h-[64px] flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-[#B81547] focus:outline-none"
+                placeholder="Napíšte správu klientovi..."
+                value={inputValue}
+                onChange={(event) => setInputValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!canSend}
+                className={`rounded-md px-4 py-2 text-sm font-semibold text-white transition ${
+                  canSend ? 'bg-[#B81547] hover:bg-[#a0123c]' : 'cursor-not-allowed bg-slate-300'
+                }`}
+              >
+                {isSending ? 'Odosielam...' : 'Send'}
+              </button>
             </div>
-          ))}
-        </div>
-
-        <div className="mt-4 flex items-end gap-3">
-          <textarea
-            className="min-h-[64px] flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-[#B81547] focus:outline-none"
-            placeholder="Napíšte správu klientovi..."
-            value={inputValue}
-            onChange={(event) => setInputValue(event.target.value)}
-          />
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!canSend}
-            className={`rounded-md px-4 py-2 text-sm font-semibold text-white transition ${
-              canSend ? 'bg-[#B81547] hover:bg-[#a0123c]' : 'cursor-not-allowed bg-slate-300'
-            }`}
-          >
-            {isSending ? 'Odosielam...' : 'Send'}
-          </button>
-        </div>
-      </main>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 };
