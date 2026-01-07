@@ -28,10 +28,32 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const [topic, setTopic] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const normalizeDifficulty = (raw) => {
+    const normalized = raw?.toString().trim().toLowerCase();
+    if (normalized === 'intermediate') return 'advanced';
+    if (normalized === 'advanced' || normalized === 'expert') return normalized;
+    return 'beginner';
+  };
+
+  const normalizeClientType = (raw) => {
+    const normalized = raw?.toString().trim().toLowerCase();
+    if (normalized === 'existing') return 'repeat';
+    if (normalized === 'repeat') return 'repeat';
+    return 'new';
+  };
+
+  const normalizeDisc = (raw, normalizedClientType) => {
+    if (normalizedClientType !== 'repeat') return null;
+    const normalized = raw?.toString().trim().toUpperCase();
+    return ['D', 'I', 'S', 'C'].includes(normalized) ? normalized : null;
+  };
+
   useEffect(() => {
     if (open) {
       // Reset state when dialog opens
-      setExperienceLevel(user?.user_metadata?.experience_level || null);
+      setExperienceLevel(
+        normalizeDifficulty(user?.user_metadata?.experience_level || null)
+      );
       setClientCategory(null);
       setClientType(null);
       setTopic('');
@@ -39,12 +61,22 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
     }
   }, [open, user]);
 
+  useEffect(() => {
+    if (clientCategory !== 'repeat' && clientType) {
+      setClientType(null);
+    }
+  }, [clientCategory, clientType]);
+
   const handleStartSession = async () => {
+    const normalizedClientCategory = normalizeClientType(clientCategory);
+    const normalizedDifficulty = normalizeDifficulty(experienceLevel);
+    const normalizedDisc = normalizeDisc(clientType, normalizedClientCategory);
+
     if (
       !experienceLevel ||
       !clientCategory ||
       !topic.trim() ||
-      (clientCategory === 'repeat' && !clientType)
+      (normalizedClientCategory === 'repeat' && !normalizedDisc)
     ) {
       toast({
         title: "Chýbajúce informácie",
@@ -64,8 +96,9 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
       status: 'started',
       started_at: new Date().toISOString(),
       topic: topic.trim(),
-      client_disc_type: clientType,
-      difficulty: experienceLevel,
+      client_category: normalizedClientCategory,
+      client_disc_type: normalizedDisc,
+      difficulty: normalizedDifficulty,
       industry: topic.trim(), // Mapping topic to industry
     };
 
@@ -103,10 +136,10 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   ];
 
   const discClientTypes = [
-    { value: 'D', label: 'Dominantný', description: 'Rýchly, priamy, orientovaný na výsledky', color: 'bg-red-500' },
-    { value: 'I', label: 'Interaktívny', description: 'Komunikatívny, emocionálny, priateľský', color: 'bg-yellow-500' },
-    { value: 'S', label: 'Stabilný', description: 'Pokojný, lojálny, hľadá istotu', color: 'bg-green-500' },
-    { value: 'C', label: 'Analytický', description: 'Precízny, logický, detailista', color: 'bg-blue-500' },
+    { value: 'D', label: 'Dominantný (D)', description: 'Rýchly, priamy, orientovaný na výsledky', color: 'bg-red-500' },
+    { value: 'I', label: 'Iniciatívny (I)', description: 'Komunikatívny, emocionálny, priateľský', color: 'bg-yellow-500' },
+    { value: 'S', label: 'Stabilný (S)', description: 'Pokojný, lojálny, hľadá istotu', color: 'bg-green-500' },
+    { value: 'C', label: 'Svedomitý (C)', description: 'Precízny, logický, detailista', color: 'bg-blue-500' },
   ];
 
   return (
@@ -162,7 +195,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
                     key={category.value}
                     onClick={() => {
                       setClientCategory(category.value);
-                      setClientType(category.value === 'new' ? 'new_client' : null);
+                      setClientType(null);
                     }}
                     className={cn(
                       'p-4 sm:p-6 rounded-2xl border-2 text-center cursor-pointer transition-all duration-200 flex flex-col items-center justify-start',
