@@ -1,0 +1,32 @@
+[
+  {
+    "id": "crm_smb_new",
+    "title": "CRM pre malé firmy – prvý nákup",
+    "description": "Stretnutie s majiteľom malej firmy, ktorý eviduje zákazníkov v tabuľkách. Zaujíma ho jednoduché zavedenie a rýchly prínos pre obchodný tím. Rozpočet je obmedzený a chce vidieť jasnú návratnosť. Má obavy z migrácie dát a času na zaškolenie.",
+    "constraints": [
+      "Rozpočet je obmedzený.",
+      "Chce rýchle nasadenie do 4 týždňov.",
+      "Obáva sa migrácie dát a školenia."
+    ]
+  },
+  {
+    "id": "manufacturing_b2b_repeat",
+    "title": "Výrobná firma – rozšírenie existujúceho riešenia",
+    "description": "Rok používajú váš systém pre plánovanie výroby, teraz riešia modul pre údržbu. Klient je spokojný, ale potrebuje preukázateľné zlepšenie OEE a menej odstávok. Do hry vstupuje finančný riaditeľ a tlačí na merateľné KPI. Očakáva jasný plán implementácie bez prerušenia výroby.",
+    "constraints": [
+      "Merateľné KPI (OEE, odstávky) sú kľúčové.",
+      "Implementácia nesmie prerušiť výrobu.",
+      "Rozhodovanie ovplyvňuje finančný riaditeľ."
+    ]
+  },
+  {
+    "id": "services_hr_new",
+    "title": "HR služby – náborový outsourcing pre poradenskú firmu",
+    "description": "Poradenská firma rýchlo rastie a nestíha obsadzovať seniorné pozície. Hľadajú partnera na nábor a onboarding, ktorý udrží kvalitu kandidátov. Citlivé sú otázky employer brandingu a dôvernosti informácií. Očakávajú flexibilný model spolupráce a transparentné reporty.",
+    "constraints": [
+      "Kvalita kandidátov je dôležitejšia než rýchlosť.",
+      "Dôvernosť a employer branding sú citlivé.",
+      "Chcú flexibilný model a pravidelné reporty."
+    ]
+  }
+]

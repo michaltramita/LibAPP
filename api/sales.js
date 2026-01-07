@@ -11,10 +11,19 @@ const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
 const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
 const SESSION_OWNER_COLUMN = 'user_id';
 let missingSupabaseEnvLogged = false;
+const SALES_SCENARIOS = require('../shared/salesScenarios.json');
 
 const STAGES = ['intro', 'discovery', 'presentation', 'closing'];
 const DISC_TYPES = ['D', 'I', 'S', 'C'];
 const CLIENT_TYPES = ['new', 'repeat'];
+
+const DEFAULT_SCENARIO =
+  (Array.isArray(SALES_SCENARIOS) && SALES_SCENARIOS[0]) || {
+    id: 'default',
+    title: 'Všeobecný obchodný scenár',
+    description: 'Všeobecný tréningový scenár bez špecifikácie.',
+    constraints: [],
+  };
 
 const BASE_BY_STAGE = {
   intro: {
@@ -414,6 +423,10 @@ async function handleSession(req, res) {
     typeof body.client_disc_type === 'string' && body.client_disc_type.trim()
       ? body.client_disc_type.trim()
       : null;
+  const scenarioId =
+    typeof body.scenario_id === 'string' && body.scenario_id.trim()
+      ? body.scenario_id.trim()
+      : null;
   const moduleValue =
     typeof body.module === 'string' && body.module.trim()
       ? body.module.trim()
@@ -461,17 +474,31 @@ async function handleSession(req, res) {
       difficulty,
       client_type: clientType,
       client_disc_type: clientDiscType,
+      scenario_id: scenarioId,
       user_id: userId,
     };
+
+    if (!scenarioId) {
+      delete sessionInput.scenario_id;
+    }
 
     if (requestedSessionId) {
       sessionInput.id = requestedSessionId;
     }
 
-    const { data: sessionData, error: sessionError } = await supabase
+    let { data: sessionData, error: sessionError } = await supabase
       .from('sales_voice_sessions')
       .insert([sessionInput])
       .select('id');
+
+    if (sessionError && scenarioId && isMissingColumnError(sessionError, 'scenario_id')) {
+      const fallbackInput = { ...sessionInput };
+      delete fallbackInput.scenario_id;
+      ({ data: sessionData, error: sessionError } = await supabase
+        .from('sales_voice_sessions')
+        .insert([fallbackInput])
+        .select('id'));
+    }
 
     if (sessionError) {
       console.error('[sales-api] failed to insert session', sessionError);
@@ -508,6 +535,50 @@ function resolveSessionId(sessionData, requestedSessionId) {
   }
 
   return requestedSessionId || null;
+}
+
+function isMissingColumnError(error, columnName) {
+  if (!error) return false;
+  if (error.code === '42703') return true;
+  const message = `${error.message || ''}`.toLowerCase();
+  return message.includes('column') && message.includes(columnName.toLowerCase());
+}
+
+function resolveScenarioById(scenarioId) {
+  const normalized = typeof scenarioId === 'string' ? scenarioId.trim() : '';
+  if (!normalized) return null;
+  return SALES_SCENARIOS.find((scenario) => scenario.id === normalized) || null;
+}
+
+function deriveScenarioConstraints(scenario) {
+  if (!scenario || typeof scenario !== 'object') return [];
+  const explicit = Array.isArray(scenario.constraints)
+    ? scenario.constraints.map((constraint) => `${constraint}`.trim()).filter(Boolean)
+    : [];
+  if (explicit.length) return explicit;
+
+  const description = typeof scenario.description === 'string' ? scenario.description.trim() : '';
+  if (!description) return [];
+
+  const sentences = description
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  return sentences
+    .slice(0, 3)
+    .map((sentence) => sentence.replace(/[.!?]+$/, '').trim())
+    .filter(Boolean);
+}
+
+function buildScenarioContext(scenarioId) {
+  const scenario = resolveScenarioById(scenarioId) || DEFAULT_SCENARIO;
+  return {
+    id: scenario.id,
+    title: scenario.title,
+    description: scenario.description,
+    constraints: deriveScenarioConstraints(scenario),
+  };
 }
 
 async function handleMessage(req, res) {
@@ -561,12 +632,21 @@ async function handleMessage(req, res) {
     if (!authContext) return;
     const { supabase, userId } = authContext;
 
-    const { data: existingSessions, error: sessionQueryError } = await supabase
+    let { data: existingSessions, error: sessionQueryError } = await supabase
       .from('sales_voice_sessions')
-      .select('id,user_id,difficulty,client_type,client_disc_type')
+      .select('id,user_id,difficulty,client_type,client_disc_type,scenario_id')
       .eq('id', sessionIdValue)
       .eq('user_id', userId)
       .limit(1);
+
+    if (sessionQueryError && isMissingColumnError(sessionQueryError, 'scenario_id')) {
+      ({ data: existingSessions, error: sessionQueryError } = await supabase
+        .from('sales_voice_sessions')
+        .select('id,user_id,difficulty,client_type,client_disc_type')
+        .eq('id', sessionIdValue)
+        .eq('user_id', userId)
+        .limit(1));
+    }
 
     if (sessionQueryError) {
       console.error('[sales-api] failed to verify session', sessionQueryError);
@@ -620,6 +700,8 @@ async function handleMessage(req, res) {
       );
     }
 
+    const scenarioContext = buildScenarioContext(session.scenario_id);
+
     const clientReplyText = await generateClientReply({
       latestMessage: contentValue,
       stage,
@@ -627,6 +709,7 @@ async function handleMessage(req, res) {
       clientType: session.client_type,
       clientDiscType: session.client_disc_type,
       salesmanCount,
+      scenarioContext,
     });
 
     const { error: clientMessageError } = await supabase
@@ -717,7 +800,9 @@ async function generateClientReply({
   clientType,
   clientDiscType,
   salesmanCount,
+  scenarioContext,
 }) {
+  const resolvedScenarioContext = scenarioContext || buildScenarioContext();
   const inputType = classifySalesmanInput(latestMessage);
   const replyMode = resolveReplyMode({
     inputType,
@@ -739,6 +824,7 @@ async function generateClientReply({
     triggers,
     maxQuestions,
     inputType,
+    scenarioContext: resolvedScenarioContext,
   });
   plan.replyMode = replyMode;
 
@@ -748,6 +834,7 @@ async function generateClientReply({
       clientType: plan.clientType,
       discUsed: plan.discUsed,
       tone: plan.tone,
+      scenario: plan.scenarioContext?.id || 'unknown',
       questions: plan.questions.length,
       triggers,
       inputType,
@@ -958,6 +1045,7 @@ function buildSmallTalkPlan({ stage, salesmanCount }) {
  * @property {string[]} questions
  * @property {string} reaction
  * @property {"agree"|"postpone"|"decline"} [nextStepType]
+ * @property {{id: string, title: string, description: string, constraints: string[]}} scenarioContext
  */
 
 function buildReplyPlan({
@@ -970,6 +1058,7 @@ function buildReplyPlan({
   triggers,
   maxQuestions,
   inputType,
+  scenarioContext,
 }) {
   const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
   const normalizedDifficulty = normalizeDifficulty(difficulty);
@@ -989,6 +1078,7 @@ function buildReplyPlan({
       tone: 'friendly',
       goal: base.goal,
       constraints: [],
+      scenarioContext,
       questions: smallTalk.questions.slice(0, maxQuestions),
       reaction,
     };
@@ -1034,6 +1124,7 @@ function buildReplyPlan({
     tone: ruleSet.tone,
     goal: base.goal,
     constraints,
+    scenarioContext,
     questions,
     reaction: base.defaultReaction,
   };
@@ -1119,12 +1210,27 @@ async function renderPlanWithLLM(plan, latestMessage, maxQuestions) {
   try {
     const llm = createLLMClient();
     const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepridávaj nové body.`;
+    const scenarioContext = plan?.scenarioContext;
+    const scenarioTitle = scenarioContext?.title || DEFAULT_SCENARIO.title;
+    const scenarioConstraints = Array.isArray(scenarioContext?.constraints)
+      ? scenarioContext.constraints.filter(Boolean)
+      : [];
+    const scenarioConstraintLines = scenarioConstraints.length
+      ? scenarioConstraints.map((constraint) => `- ${constraint}`)
+      : ['- -'];
+    const scenarioBlock = `Scenario context:
+TITLE: ${scenarioTitle}
+CONSTRAINTS:
+${scenarioConstraintLines.join('\n')}`;
+
     const developerPrompt = `ReplyPlan (JSON): ${JSON.stringify(plan)}
+${scenarioBlock}
 Reply mode: ${plan.replyMode}
 Max počet otázok: ${maxQuestions}
 Pravidlá:
 - Odpoveď musí byť po slovensky.
 - Drž sa otázok, reakcie, constraints a nextStepType.
+- Obsah odpovede musí byť vecne viazaný na Scenario context.
 - Žiadne školenie obchodníka ani meta poznámky.
 - Odpoveď má mať max 60 slov.
 - Použi presne tento formát, každý riadok na nový riadok:

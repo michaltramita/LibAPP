@@ -5,6 +5,7 @@ import { ChevronRight, Clock, User, BarChart, Award, Check, X, AlertTriangle, Pa
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from '@/lib/customSupabaseClient';
 import SessionDetailModal from '@/components/SessionDetailModal';
+import { resolveScenarioForSession } from '@/utils/salesScenarios';
 
 // New component for truncating text
 const TruncatedText = ({ text, wordLimit, isExpanded, onToggle }) => {
@@ -195,7 +196,7 @@ const RecentSessions = ({ sessions }) => {
                   <div className="flex items-start gap-2 mb-2">
                     <BarChart className="w-4 h-4 text-slate-500 mt-1 flex-shrink-0"/>
                     <TruncatedText 
-                        text={session.topic || 'Nezadaná téma'} 
+                        text={resolveScenarioForSession(session).title || 'Nezadaná téma'} 
                         wordLimit={3}
                         isExpanded={!!expandedTopics[session.id]}
                         onToggle={() => toggleTopicExpansion(session.id)}

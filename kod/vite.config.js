@@ -246,6 +246,9 @@ export default defineConfig({
 			'Cross-Origin-Embedder-Policy': 'credentialless',
 		},
 		allowedHosts: true,
+		fs: {
+			allow: [path.resolve(__dirname, '..'), path.resolve(__dirname, '../shared')],
+		},
 	},
 	resolve: {
 		extensions: ['.jsx', '.js', '.tsx', '.ts', '.json', ],
