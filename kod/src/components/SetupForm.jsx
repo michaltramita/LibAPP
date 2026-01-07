@@ -5,8 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Users, Target, Briefcase, Play } from 'lucide-react';
 
 const SetupForm = ({ onStartMeeting }) => {
-  const [salesmanLevel, setSalesmanLevel] = useState('beginner');
-  const [clientType, setClientType] = useState('D');
+  const [difficulty, setDifficulty] = useState('beginner');
+  const [clientType, setClientType] = useState('new');
+  const [clientDiscType, setClientDiscType] = useState(null);
   const [industry, setIndustry] = useState('technology');
 
   const salesmanLevels = [
@@ -15,28 +16,33 @@ const SetupForm = ({ onStartMeeting }) => {
     { value: 'expert', label: 'Expert', description: 'Majster predaja, rieši zložité obchody' }
   ];
 
-  const clientTypes = [
-    { 
-      value: 'D', 
-      label: 'Dominantný (D)', 
+  const clientCategories = [
+    { value: 'new', label: 'Nový klient', description: 'Prvé stretnutie s novým zákazníkom' },
+    { value: 'repeat', label: 'Opakovaný predaj', description: 'Pokračovanie spolupráce s existujúcim klientom' }
+  ];
+
+  const discClientTypes = [
+    {
+      value: 'D',
+      label: 'Dominantný (D)',
       description: 'Priamy, orientovaný na výsledky, rozhodný, súťaživý',
       traits: 'Rýchle tempo, zameraný na úlohy, cení si efektivitu'
     },
-    { 
-      value: 'I', 
-      label: 'Ovplyvňujúci (I)', 
+    {
+      value: 'I',
+      label: 'Iniciatívny (I)',
       description: 'Spoločenský, nadšený, optimistický, presvedčivý',
       traits: 'Rýchle tempo, zameraný na ľudí, cení si vzťahy'
     },
-    { 
-      value: 'S', 
-      label: 'Stabilný (S)', 
+    {
+      value: 'S',
+      label: 'Stabilný (S)',
       description: 'Trpezlivý, spoľahlivý, podporujúci, tímový hráč',
       traits: 'Mierne tempo, zameraný na ľudí, cení si stabilitu'
     },
-    { 
-      value: 'C', 
-      label: 'Svedomitý (C)', 
+    {
+      value: 'C',
+      label: 'Svedomitý (C)',
       description: 'Analytický, presný, systematický, orientovaný na detaily',
       traits: 'Mierne tempo, zameraný na úlohy, cení si presnosť'
     }
@@ -54,8 +60,9 @@ const SetupForm = ({ onStartMeeting }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     onStartMeeting({
-      salesmanLevel,
+      difficulty,
       clientType,
+      clientDiscType: clientType === 'repeat' ? clientDiscType : null,
       industry
     });
   };
@@ -84,9 +91,9 @@ const SetupForm = ({ onStartMeeting }) => {
                   key={level.value}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setSalesmanLevel(level.value)}
+                  onClick={() => setDifficulty(level.value)}
                   className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                    salesmanLevel === level.value
+                    difficulty === level.value
                       ? 'border-[#B81547] bg-red-50 shadow-md'
                       : 'border-slate-200 bg-white hover:border-red-200'
                   }`}
@@ -101,28 +108,60 @@ const SetupForm = ({ onStartMeeting }) => {
           <div className="space-y-4">
             <Label className="text-lg font-semibold text-slate-900 flex items-center gap-2">
               <Users className="w-5 h-5" />
-              Typ osobnosti klienta (DISC)
+              Typ klienta
             </Label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {clientTypes.map((type) => (
+              {clientCategories.map((category) => (
                 <motion.div
-                  key={type.value}
+                  key={category.value}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setClientType(type.value)}
+                  onClick={() => {
+                    setClientType(category.value);
+                    if (category.value === 'new') {
+                      setClientDiscType(null);
+                    }
+                  }}
                   className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                    clientType === type.value
+                    clientType === category.value
                       ? 'border-[#B81547] bg-red-50 shadow-md'
                       : 'border-slate-200 bg-white hover:border-red-200'
                   }`}
                 >
-                  <div className="font-semibold text-slate-900 mb-1">{type.label}</div>
-                  <div className="text-sm text-slate-600 mb-2">{type.description}</div>
-                  <div className="text-xs text-slate-500 italic">{type.traits}</div>
+                  <div className="font-semibold text-slate-900 mb-1">{category.label}</div>
+                  <div className="text-sm text-slate-600">{category.description}</div>
                 </motion.div>
               ))}
             </div>
           </div>
+
+          {clientType === 'repeat' && (
+            <div className="space-y-4">
+              <Label className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                Typ osobnosti klienta (DISC)
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {discClientTypes.map((type) => (
+                  <motion.div
+                    key={type.value}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setClientDiscType(type.value)}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      clientDiscType === type.value
+                        ? 'border-[#B81547] bg-red-50 shadow-md'
+                        : 'border-slate-200 bg-white hover:border-red-200'
+                    }`}
+                  >
+                    <div className="font-semibold text-slate-900 mb-1">{type.label}</div>
+                    <div className="text-sm text-slate-600 mb-2">{type.description}</div>
+                    <div className="text-xs text-slate-500 italic">{type.traits}</div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-4">
             <Label className="text-lg font-semibold text-slate-900 flex items-center gap-2">
