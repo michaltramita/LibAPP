@@ -479,26 +479,32 @@ async function generateClientReply({
   salesmanCount,
 }) {
   const fallbackMessage = 'Rozumiem. Pokračujte prosím.';
+  const normalizedDifficulty = normalizeDifficulty(difficulty);
+  const normalizedClientType = normalizeClientType(clientType);
+  const normalizedDiscType = normalizeDisc(clientDiscType);
+  const maxChars = 1200;
+  const maxChunks = 200;
 
   try {
     const llm = createLLMClient();
-    const systemPrompt = `You are a simulated business client in a sales conversation.
-Your behavior depends on:
-- DISC type (D/I/S/C)
-- difficulty level (beginner / advanced / expert)
-- current sales stage
+    const systemPrompt = `Si simulovaný biznis klient v obchodnom rozhovore.
+Tvoje správanie závisí od:
+- DISC typu (D/I/S/C)
+- úrovne náročnosti (beginner / advanced / expert)
+- aktuálnej fázy predaja
 
-You must:
-- respond realistically
-- ask relevant follow-up questions
-- never explain that you are an AI
-- never coach the salesman`;
+Musíš:
+- odpovedať realisticky v slovenčine
+- držať odpoveď na 2–4 vety
+- vždy položiť 1 otázku, okrem fázy "closing" kde žiadaš ďalší krok/CTA
+- nikdy neprezrádzať, že si AI
+- nikdy neškoľ obchodníka`;
 
     const developerPrompt = [
       'Context:',
-      `- difficulty: ${difficulty || 'beginner'}`,
-      `- client_type: ${clientType || 'new'}`,
-      `- client_disc_type: ${clientDiscType || 'unknown'}`,
+      `- difficulty: ${normalizedDifficulty}`,
+      `- client_type: ${normalizedClientType}`,
+      `- client_disc_type: ${normalizedDiscType}`,
       `- salesman_message_count: ${salesmanCount}`,
       `- stage: ${stage}`,
     ].join('\n');
@@ -510,19 +516,48 @@ You must:
     ];
 
     let buffer = '';
+    let chunks = 0;
     for await (const chunk of llm.streamChat({ messages })) {
+      chunks += 1;
       if (chunk.type === 'token' && chunk.content) {
         buffer += chunk.content;
       }
       if (chunk.type === 'final') {
         buffer = chunk.content || buffer;
+        break;
+      }
+      if (chunks >= maxChunks) {
+        break;
       }
     }
 
-    const finalReply = typeof buffer === 'string' ? buffer.trim() : '';
+    let finalReply = typeof buffer === 'string' ? buffer.trim() : '';
+    if (finalReply.length > maxChars) {
+      finalReply = finalReply.slice(0, maxChars).trim();
+    }
     return finalReply || fallbackMessage;
   } catch (error) {
     console.error('[sales-api] llm reply failed', error);
     return fallbackMessage;
   }
+}
+
+function normalizeDifficulty(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'intermediate') return 'advanced';
+  if (ALLOWED_DIFFICULTIES.has(normalized)) return normalized;
+  return 'beginner';
+}
+
+function normalizeClientType(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'repeat') return 'existing';
+  if (ALLOWED_CLIENT_TYPES.has(normalized)) return normalized;
+  return 'new';
+}
+
+function normalizeDisc(value) {
+  const normalized = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (ALLOWED_CLIENT_DISC_TYPES.has(normalized)) return normalized;
+  return 'D';
 }
