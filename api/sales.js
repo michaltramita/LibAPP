@@ -718,6 +718,13 @@ async function generateClientReply({
   clientDiscType,
   salesmanCount,
 }) {
+  const inputType = detectInputType(latestMessage);
+  const maxQuestions = getMaxQuestions({ inputType, stage, difficulty });
+
+  if (inputType === 'small_talk') {
+    return buildSmallTalkReply({ stage, salesmanCount });
+  }
+
   const triggers = detectTriggers(latestMessage, stage);
   const plan = buildReplyPlan({
     latestMessage,
@@ -727,6 +734,7 @@ async function generateClientReply({
     clientDiscType,
     salesmanCount,
     triggers,
+    maxQuestions,
   });
 
   if (process.env.NODE_ENV !== 'production') {
@@ -737,10 +745,12 @@ async function generateClientReply({
       tone: plan.tone,
       questions: plan.questions.length,
       triggers,
+      inputType,
+      maxQuestions,
     });
   }
 
-  const rendered = await renderPlanWithLLM(plan, latestMessage);
+  const rendered = await renderPlanWithLLM(plan, latestMessage, maxQuestions);
   if (rendered) {
     return enforceMaxLength(rendered, 400);
   }
@@ -766,6 +776,101 @@ function normalizeDisc(value) {
   return 'D';
 }
 
+function detectInputType(latestMessage) {
+  const message = typeof latestMessage === 'string' ? latestMessage.trim().toLowerCase() : '';
+  if (!message) return 'business';
+  const greetings = [
+    'ahoj',
+    'dobrý deň',
+    'dobry den',
+    'dobré ráno',
+    'dobre rano',
+    'dobrý večer',
+    'tesi ma',
+    'teší ma',
+  ];
+  const thanks = ['ďakujem', 'dakujem', 'vďaka', 'vdaka'];
+  const howAreYou = [
+    'ako sa máte',
+    'ako sa mas',
+    'ako sa máš',
+    'ako sa dari',
+    'ako sa darí',
+    'ako ide',
+    'ako to ide',
+  ];
+  const pleasantries = ['super', 'fajn', 'ok', 'dobre', 'výborne', 'pekne'];
+
+  const isGreetingMatch =
+    greetings.some((greeting) => message.includes(greeting)) ||
+    /(dobry|dobrý)\s+de[nň]/.test(message) ||
+    /(dobre|dobré)\s+r[aá]no/.test(message);
+  const isThanksMatch = thanks.some((thanksItem) => message.includes(thanksItem));
+  const isHowAreYouMatch = howAreYou.some((item) => message.includes(item));
+  const isPleasantryMatch = pleasantries.some((item) => message.includes(item));
+
+  if (isGreetingMatch || isThanksMatch || isHowAreYouMatch || isPleasantryMatch) {
+    return 'small_talk';
+  }
+
+  const words = message.split(/\s+/).filter(Boolean);
+  if (words.length <= 6) {
+    const pleasantrySet = new Set(pleasantries.concat(['dik', 'dikce', 'vdaka', 'dakujem']));
+    const pleasantryCount = words.filter((word) => pleasantrySet.has(word)).length;
+    if (pleasantryCount >= Math.max(1, Math.ceil(words.length * 0.5))) {
+      return 'small_talk';
+    }
+  }
+
+  return 'business';
+}
+
+function getMaxQuestions({ inputType, stage, difficulty }) {
+  if (inputType === 'small_talk') return 1;
+  const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
+  const stageLimits = {
+    intro: 1,
+    discovery: 2,
+    presentation: 2,
+    closing: 1,
+  };
+  const maxQuestions = stageLimits[normalizedStage] ?? 1;
+  if (difficulty === 'expert') {
+    return maxQuestions;
+  }
+  return maxQuestions;
+}
+
+function buildSmallTalkReply({ stage, salesmanCount }) {
+  const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
+  const templates = {
+    intro: [
+      'Dobre, ďakujem. Môžeme prejsť k vašej potrebe?',
+      'Ďakujem, mám sa dobre. Čo dnes riešime?',
+      'Teší ma. Povedzte stručne, s čím prichádzate.',
+    ],
+    discovery: [
+      'Dobre, ďakujem. Môžeme prejsť k vašej potrebe?',
+      'Ďakujem, mám sa dobre. Čo je teraz najdôležitejšie?',
+      'Teší ma. Povedzte stručne, s čím prichádzate.',
+    ],
+    presentation: [
+      'Mám sa dobre. Čo presne ponúkate a v čom je prínos?',
+      'Ďakujem, mám sa dobre. V čom je to pre mňa výhodné?',
+      'Dobre, ďakujem. Čo je najväčší prínos vášho riešenia?',
+    ],
+    closing: [
+      'Ďakujem, mám sa dobre. Aký je ďalší krok?',
+      'Dobre, ďakujem. Ako by sme to uzavreli?',
+      'Teší ma. Čo navrhujete ako ďalší krok?',
+    ],
+  };
+
+  const pool = templates[normalizedStage] || templates.intro;
+  const index = Math.abs(salesmanCount || 0) % pool.length;
+  return pool[index];
+}
+
 /**
  * @typedef {Object} ReplyPlan
  * @property {"sk"} language
@@ -788,6 +893,7 @@ function buildReplyPlan({
   clientDiscType,
   salesmanCount,
   triggers,
+  maxQuestions,
 }) {
   const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
   const normalizedDifficulty = normalizeDifficulty(difficulty);
@@ -817,6 +923,7 @@ function buildReplyPlan({
     difficulty: normalizedDifficulty,
     questionPool: ruleSet.questionPools,
     salesmanCount,
+    maxQuestions,
   });
 
   const constraints = [...ruleSet.constraints];
@@ -849,13 +956,14 @@ function buildReplyPlan({
     plan.nextStepType = resolveNextStepType(resolvedTriggers);
   }
 
-  plan.questions = plan.questions.slice(0, base.maxQuestions);
+  const resolvedMaxQuestions = typeof maxQuestions === 'number' ? maxQuestions : base.maxQuestions;
+  plan.questions = plan.questions.slice(0, resolvedMaxQuestions);
   return plan;
 }
 
-function selectQuestions({ stage, difficulty, questionPool, salesmanCount }) {
-  const base = BASE_BY_STAGE[stage];
-  const maxQuestions = base.maxQuestions;
+function selectQuestions({ stage, difficulty, questionPool, salesmanCount, maxQuestions }) {
+  const fallbackMax = BASE_BY_STAGE[stage]?.maxQuestions ?? 1;
+  const resolvedMaxQuestions = typeof maxQuestions === 'number' ? maxQuestions : fallbackMax;
   const pickIndex = Math.abs(salesmanCount || 0) % questionPool.length;
   const primary = questionPool[pickIndex];
 
@@ -864,10 +972,10 @@ function selectQuestions({ stage, difficulty, questionPool, salesmanCount }) {
       return [primary];
     }
     const secondary = questionPool[(pickIndex + 1) % questionPool.length];
-    return [primary, secondary];
+    return [primary, secondary].slice(0, resolvedMaxQuestions);
   }
 
-  return [primary].slice(0, maxQuestions);
+  return [primary].slice(0, resolvedMaxQuestions);
 }
 
 function detectTriggers(latestMessage, stage) {
@@ -915,16 +1023,22 @@ function resolveNextStepType(triggers) {
   return 'agree';
 }
 
-async function renderPlanWithLLM(plan, latestMessage) {
+async function renderPlanWithLLM(plan, latestMessage, maxQuestions) {
   try {
     const llm = createLLMClient();
-    const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepřidávaj nové body.`;
+    const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepridávaj nové body.`;
     const developerPrompt = `ReplyPlan (JSON): ${JSON.stringify(plan)}
+Max počet otázok: ${maxQuestions}
 Pravidlá:
 - Odpoveď musí byť po slovensky.
 - Drž sa otázok, reakcie, constraints a nextStepType.
 - Žiadne školenie obchodníka ani meta poznámky.
-- Max 400 znakov.`;
+- Odpoveď má mať max 60 slov.
+- Použi presne tento formát, každý riadok na nový riadok:
+REAKCIA: <1-2 krátke vety>
+OTÁZKA: <0-${maxQuestions} otázky; ak 0, napíš "-">
+- Ak sú 2 otázky, oddeľ ich " | ".
+- Nikdy neprekroč maxQuestions.`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -950,11 +1064,59 @@ Pravidlá:
     }
 
     const finalReply = typeof buffer === 'string' ? buffer.trim() : '';
-    return finalReply || null;
+    if (!finalReply) return null;
+    const normalized = normalizeLlmReply(finalReply, maxQuestions);
+    return normalized || 'Rozumiem. Môžete to prosím upresniť?';
   } catch (error) {
     console.error('[sales-api] llm render failed', error);
     return null;
   }
+}
+
+function normalizeLlmReply(rawReply, maxQuestions) {
+  const lines = rawReply
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const reactionLine = lines.find((line) => line.toUpperCase().startsWith('REAKCIA:'));
+  const questionLine = lines.find((line) => line.toUpperCase().startsWith('OTÁZKA:'));
+
+  if (!reactionLine || !questionLine) {
+    return null;
+  }
+
+  const reaction = reactionLine.split(':').slice(1).join(':').trim();
+  const questionContent = questionLine.split(':').slice(1).join(':').trim();
+  const rebuiltQuestions = rebuildQuestions(questionContent, maxQuestions);
+  if (!rebuiltQuestions) {
+    return null;
+  }
+
+  return `REAKCIA: ${reaction || '-'}\nOTÁZKA: ${rebuiltQuestions}`;
+}
+
+function rebuildQuestions(questionContent, maxQuestions) {
+  if (questionContent === '-' || maxQuestions === 0) {
+    return '-';
+  }
+
+  const questionMatches = questionContent.match(/[^?]+\?/g);
+  let questions = [];
+  if (questionMatches && questionMatches.length) {
+    questions = questionMatches.map((question) => question.trim());
+  } else if (questionContent) {
+    const rawSegments = questionContent.split('|').map((segment) => segment.trim());
+    questions = rawSegments.filter(Boolean).map((segment) =>
+      segment.endsWith('?') ? segment : `${segment}?`
+    );
+  }
+
+  const limited = questions.slice(0, Math.max(1, maxQuestions));
+  if (!limited.length) {
+    return '-';
+  }
+
+  return limited.join(' | ');
 }
 
 function renderPlanFallback(plan) {
