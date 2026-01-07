@@ -718,12 +718,15 @@ async function generateClientReply({
   clientDiscType,
   salesmanCount,
 }) {
-  const inputType = detectInputType(latestMessage);
-  const maxQuestions = getMaxQuestions({ inputType, stage, difficulty });
-
-  if (inputType === 'small_talk') {
-    return buildSmallTalkReply({ stage, salesmanCount });
-  }
+  const inputType = classifySalesmanInput(latestMessage);
+  const replyMode = resolveReplyMode({
+    inputType,
+    stage,
+    difficulty,
+    discType: clientDiscType,
+    clientType,
+  });
+  const maxQuestions = resolveMaxQuestions({ replyMode });
 
   const triggers = detectTriggers(latestMessage, stage);
   const plan = buildReplyPlan({
@@ -735,7 +738,9 @@ async function generateClientReply({
     salesmanCount,
     triggers,
     maxQuestions,
+    inputType,
   });
+  plan.replyMode = replyMode;
 
   if (process.env.NODE_ENV !== 'production') {
     console.log('[sales-api] reply plan', {
@@ -746,15 +751,16 @@ async function generateClientReply({
       questions: plan.questions.length,
       triggers,
       inputType,
+      replyMode,
       maxQuestions,
     });
   }
 
-  const rendered = await renderPlanWithLLM(plan, latestMessage, maxQuestions);
+  const rendered = await renderPlanWithLLM(plan, latestMessage, maxQuestions, replyMode);
   if (rendered) {
     return enforceMaxLength(rendered, 400);
   }
-  return enforceMaxLength(renderPlanFallback(plan), 400);
+  return enforceMaxLength(renderPlanFallback(plan, replyMode), 400);
 }
 
 function normalizeDifficulty(value) {
@@ -776,9 +782,15 @@ function normalizeDisc(value) {
   return 'D';
 }
 
-function detectInputType(latestMessage) {
-  const message = typeof latestMessage === 'string' ? latestMessage.trim().toLowerCase() : '';
-  if (!message) return 'business';
+function classifySalesmanInput(text) {
+  const message = typeof text === 'string' ? text.trim() : '';
+  const lower = message.toLowerCase();
+  if (!lower) return 'other_statement';
+  const questionWordPattern = /^(kto|čo|co|kedy|kde|prečo|preco|ako|koľko|kolko)\b/i;
+  if (message.includes('?') || questionWordPattern.test(lower)) {
+    return 'question';
+  }
+
   const greetings = [
     'ahoj',
     'dobrý deň',
@@ -802,46 +814,98 @@ function detectInputType(latestMessage) {
   const pleasantries = ['super', 'fajn', 'ok', 'dobre', 'výborne', 'pekne'];
 
   const isGreetingMatch =
-    greetings.some((greeting) => message.includes(greeting)) ||
-    /(dobry|dobrý)\s+de[nň]/.test(message) ||
-    /(dobre|dobré)\s+r[aá]no/.test(message);
-  const isThanksMatch = thanks.some((thanksItem) => message.includes(thanksItem));
-  const isHowAreYouMatch = howAreYou.some((item) => message.includes(item));
-  const isPleasantryMatch = pleasantries.some((item) => message.includes(item));
+    greetings.some((greeting) => lower.includes(greeting)) ||
+    /(dobry|dobrý)\s+de[nň]/.test(lower) ||
+    /(dobre|dobré)\s+r[aá]no/.test(lower);
+  const isThanksMatch = thanks.some((thanksItem) => lower.includes(thanksItem));
+  const isHowAreYouMatch = howAreYou.some((item) => lower.includes(item));
+  const isPleasantryMatch = pleasantries.some((item) => lower.includes(item));
 
   if (isGreetingMatch || isThanksMatch || isHowAreYouMatch || isPleasantryMatch) {
-    return 'small_talk';
+    return 'greeting_smalltalk';
   }
 
-  const words = message.split(/\s+/).filter(Boolean);
-  if (words.length <= 6) {
-    const pleasantrySet = new Set(pleasantries.concat(['dik', 'dikce', 'vdaka', 'dakujem']));
-    const pleasantryCount = words.filter((word) => pleasantrySet.has(word)).length;
-    if (pleasantryCount >= Math.max(1, Math.ceil(words.length * 0.5))) {
-      return 'small_talk';
+  const agendaPattern =
+    /(chcem sa porozpr[aá]vať|chcel by som sa porozpr[aá]vať|chcela by som sa porozpr[aá]vať|r[aá]d by som prebral|rad by som prebral|r[aá]d by sme prebrali|dnes by som chcel|dnes by som chcela|dnes by sme chceli|chcem prebrať|chcel by som prebrať|chcela by som prebrať)/i;
+  if (agendaPattern.test(lower)) {
+    return 'agenda_statement';
+  }
+
+  const closingPattern =
+    /(ďalší krok|dalsi krok|navrhujem|dohodnime|stretnutie|m[oô]žeme sa stretn[uú]ť|uzavrime|uzavrieme|podp[ií]sme|term[ií]n|kedy m[oô]žeme|kedy by v[aá]m vyhovovalo)/i;
+  if (closingPattern.test(lower)) {
+    return 'closing_statement';
+  }
+
+  const pitchPattern =
+    /(naše riešenie|pon[úu]kame|produkt|slu[zž]ba|platforma|funkcia|bal[ií]k|cenn[ií]k|cena|implement[aá]cia|v[ií]hoda|benefit|feature|modul)/i;
+  if (pitchPattern.test(lower)) {
+    return 'pitch_statement';
+  }
+
+  return 'other_statement';
+}
+
+function resolveReplyMode({ inputType, stage, difficulty, discType, clientType }) {
+  const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
+  const normalizedDifficulty = normalizeDifficulty(difficulty);
+  const normalizedDisc = normalizeDisc(discType);
+  const normalizedClientType = normalizeClientType(clientType);
+
+  let replyMode = 'statement_then_question';
+
+  if (inputType === 'question') {
+    replyMode = 'statement_only';
+    if (
+      normalizedStage === 'discovery' &&
+      normalizedDifficulty === 'expert' &&
+      normalizedDisc === 'C'
+    ) {
+      replyMode = 'statement_then_question';
+    }
+  } else if (inputType === 'greeting_smalltalk') {
+    replyMode = 'statement_then_question';
+  } else if (inputType === 'agenda_statement') {
+    replyMode = 'statement_only';
+  } else if (inputType === 'pitch_statement') {
+    if (normalizedStage === 'intro' || normalizedStage === 'discovery') {
+      replyMode = 'statement_then_question';
+    } else {
+      replyMode = 'statement_only';
+    }
+  } else if (inputType === 'closing_statement') {
+    replyMode = 'statement_only';
+  } else {
+    replyMode = normalizedStage === 'intro' || normalizedStage === 'discovery'
+      ? 'statement_then_question'
+      : 'statement_only';
+  }
+
+  if (normalizedDisc === 'D' && normalizedDifficulty === 'expert') {
+    if (replyMode === 'question_only') {
+      replyMode = 'statement_only';
+    }
+    if (replyMode === 'statement_then_question' && normalizedStage !== 'discovery') {
+      replyMode = 'statement_only';
     }
   }
 
-  return 'business';
-}
-
-function getMaxQuestions({ inputType, stage, difficulty }) {
-  if (inputType === 'small_talk') return 1;
-  const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
-  const stageLimits = {
-    intro: 1,
-    discovery: 2,
-    presentation: 2,
-    closing: 1,
-  };
-  const maxQuestions = stageLimits[normalizedStage] ?? 1;
-  if (difficulty === 'expert') {
-    return maxQuestions;
+  if (normalizedClientType === 'repeat' && replyMode === 'statement_then_question') {
+    if (normalizedStage === 'presentation') {
+      replyMode = 'statement_only';
+    }
   }
-  return maxQuestions;
+
+  return replyMode;
 }
 
-function buildSmallTalkReply({ stage, salesmanCount }) {
+function resolveMaxQuestions({ replyMode }) {
+  if (replyMode === 'statement_only') return 0;
+  if (replyMode === 'statement_then_question') return 1;
+  return 1;
+}
+
+function buildSmallTalkPlan({ stage, salesmanCount }) {
   const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
   const templates = {
     intro: [
@@ -868,7 +932,18 @@ function buildSmallTalkReply({ stage, salesmanCount }) {
 
   const pool = templates[normalizedStage] || templates.intro;
   const index = Math.abs(salesmanCount || 0) % pool.length;
-  return pool[index];
+  const template = pool[index];
+  const match = template.match(/^(.*?)([^?]*\?)\s*$/);
+  if (match) {
+    return {
+      reaction: match[1].trim() || 'Ďakujem.',
+      questions: [match[2].trim()],
+    };
+  }
+  return {
+    reaction: template.trim(),
+    questions: [],
+  };
 }
 
 /**
@@ -894,6 +969,7 @@ function buildReplyPlan({
   salesmanCount,
   triggers,
   maxQuestions,
+  inputType,
 }) {
   const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
   const normalizedDifficulty = normalizeDifficulty(difficulty);
@@ -901,6 +977,22 @@ function buildReplyPlan({
   const base = BASE_BY_STAGE[normalizedStage];
   const resolvedTriggers = triggers || detectTriggers(latestMessage, normalizedStage);
   const difficultyModifiers = DIFFICULTY_MODIFIERS[normalizedDifficulty];
+
+  if (inputType === 'greeting_smalltalk') {
+    const smallTalk = buildSmallTalkPlan({ stage: normalizedStage, salesmanCount });
+    const reaction = smallTalk.reaction || base.defaultReaction;
+    return {
+      language: 'sk',
+      stage: normalizedStage,
+      clientType: normalizedClientType,
+      discUsed: 'neutral',
+      tone: 'friendly',
+      goal: base.goal,
+      constraints: [],
+      questions: smallTalk.questions.slice(0, maxQuestions),
+      reaction,
+    };
+  }
 
   let ruleSet;
   let discUsed = 'neutral';
@@ -1028,6 +1120,7 @@ async function renderPlanWithLLM(plan, latestMessage, maxQuestions) {
     const llm = createLLMClient();
     const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepridávaj nové body.`;
     const developerPrompt = `ReplyPlan (JSON): ${JSON.stringify(plan)}
+Reply mode: ${plan.replyMode}
 Max počet otázok: ${maxQuestions}
 Pravidlá:
 - Odpoveď musí byť po slovensky.
@@ -1037,6 +1130,9 @@ Pravidlá:
 - Použi presne tento formát, každý riadok na nový riadok:
 REAKCIA: <1-2 krátke vety>
 OTÁZKA: <0-${maxQuestions} otázky; ak 0, napíš "-">
+- Ak replyMode = statement_only: OTÁZKA musí byť "-".
+- Ak replyMode = statement_then_question: OTÁZKA môže byť 1 otázka alebo "-".
+- Ak replyMode = question_only: OTÁZKA musí byť presne 1 otázka; REAKCIA môže byť krátka alebo "-".
 - Ak sú 2 otázky, oddeľ ich " | ".
 - Nikdy neprekroč maxQuestions.`;
 
@@ -1065,15 +1161,15 @@ OTÁZKA: <0-${maxQuestions} otázky; ak 0, napíš "-">
 
     const finalReply = typeof buffer === 'string' ? buffer.trim() : '';
     if (!finalReply) return null;
-    const normalized = normalizeLlmReply(finalReply, maxQuestions);
-    return normalized || 'Rozumiem. Môžete to prosím upresniť?';
+    const normalized = normalizeClientReply(finalReply, { replyMode: plan.replyMode, maxQuestions });
+    return normalized || null;
   } catch (error) {
     console.error('[sales-api] llm render failed', error);
     return null;
   }
 }
 
-function normalizeLlmReply(rawReply, maxQuestions) {
+function normalizeClientReply(rawReply, { replyMode, maxQuestions }) {
   const lines = rawReply
     .split('\n')
     .map((line) => line.trim())
@@ -1087,17 +1183,34 @@ function normalizeLlmReply(rawReply, maxQuestions) {
 
   const reaction = reactionLine.split(':').slice(1).join(':').trim();
   const questionContent = questionLine.split(':').slice(1).join(':').trim();
-  const rebuiltQuestions = rebuildQuestions(questionContent, maxQuestions);
+  const rebuiltQuestions = rebuildQuestions(questionContent, { replyMode, maxQuestions });
   if (!rebuiltQuestions) {
     return null;
   }
 
-  return `REAKCIA: ${reaction || '-'}\nOTÁZKA: ${rebuiltQuestions}`;
+  const normalizedReaction = normalizeReaction(reaction, replyMode);
+  if (replyMode === 'question_only' && rebuiltQuestions === '-') {
+    return null;
+  }
+
+  return `REAKCIA: ${normalizedReaction}\nOTÁZKA: ${rebuiltQuestions}`;
 }
 
-function rebuildQuestions(questionContent, maxQuestions) {
-  if (questionContent === '-' || maxQuestions === 0) {
+function normalizeReaction(reaction, replyMode) {
+  const trimmed = typeof reaction === 'string' ? reaction.trim() : '';
+  if (replyMode === 'question_only') {
+    return trimmed && trimmed !== '-' ? trimmed : '-';
+  }
+  return trimmed || '-';
+}
+
+function rebuildQuestions(questionContent, { replyMode, maxQuestions }) {
+  if (replyMode === 'statement_only' || maxQuestions === 0) {
     return '-';
+  }
+
+  if (questionContent === '-') {
+    return replyMode === 'question_only' ? null : '-';
   }
 
   const questionMatches = questionContent.match(/[^?]+\?/g);
@@ -1111,31 +1224,35 @@ function rebuildQuestions(questionContent, maxQuestions) {
     );
   }
 
-  const limited = questions.slice(0, Math.max(1, maxQuestions));
+  const limit = replyMode === 'statement_then_question' ? 1 : Math.max(1, maxQuestions);
+  const limited = questions.slice(0, limit);
   if (!limited.length) {
-    return '-';
+    return replyMode === 'question_only' ? null : '-';
   }
 
   return limited.join(' | ');
 }
 
-function renderPlanFallback(plan) {
-  const parts = [];
+function renderPlanFallback(plan, replyMode) {
+  const reactionParts = [];
   if (plan.reaction) {
-    parts.push(plan.reaction);
+    reactionParts.push(plan.reaction);
   }
   if (plan.constraints.length) {
-    parts.push(plan.constraints[0]);
-  }
-  if (plan.questions.length) {
-    parts.push(plan.questions.join(' '));
+    reactionParts.push(plan.constraints[0]);
   }
 
   if (plan.stage === 'closing') {
-    parts.push(resolveClosingEnding(plan));
+    reactionParts.push(resolveClosingEnding(plan));
   }
 
-  return parts.join(' ').trim();
+  const reaction = reactionParts.join(' ').trim() || '-';
+  let question = '-';
+  if (replyMode !== 'statement_only' && plan.questions.length) {
+    question = plan.questions[0];
+  }
+
+  return `REAKCIA: ${normalizeReaction(reaction, replyMode)}\nOTÁZKA: ${question || '-'}`;
 }
 
 function resolveClosingEnding(plan) {
