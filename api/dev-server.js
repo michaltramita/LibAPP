@@ -164,11 +164,27 @@ const server = http.createServer(async (req, res) => {
             client_disc_type: body.client_disc_type ?? null,
           };
 
-          const { data: sessionData, error: sessionError } = await supabaseAdmin
+          const scenarioId =
+            typeof body.scenario_id === 'string' ? body.scenario_id.trim() : '';
+          if (scenarioId) {
+            sessionInput.scenario_id = scenarioId;
+          }
+
+          let { data: sessionData, error: sessionError } = await supabaseAdmin
             .from('sales_voice_sessions')
             .insert([sessionInput])
             .select('id')
             .single();
+
+          if (sessionError && scenarioId && sessionError.code === '42703') {
+            const fallbackInput = { ...sessionInput };
+            delete fallbackInput.scenario_id;
+            ({ data: sessionData, error: sessionError } = await supabaseAdmin
+              .from('sales_voice_sessions')
+              .insert([fallbackInput])
+              .select('id')
+              .single());
+          }
 
           if (sessionError) {
             console.error('[sales-api] failed to insert session', sessionError);

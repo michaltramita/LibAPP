@@ -502,17 +502,31 @@ async function handleSession(req, res) {
       difficulty,
       client_type: clientType,
       client_disc_type: clientDiscType,
+      scenario_id: scenarioId,
       user_id: userId,
     };
+
+    if (!scenarioId) {
+      delete sessionInput.scenario_id;
+    }
 
     if (requestedSessionId) {
       sessionInput.id = requestedSessionId;
     }
 
-    const { data: sessionData, error: sessionError } = await supabase
+    let { data: sessionData, error: sessionError } = await supabase
       .from('sales_voice_sessions')
       .insert([sessionInput])
       .select('id');
+
+    if (sessionError && scenarioId && isMissingColumnError(sessionError, 'scenario_id')) {
+      const fallbackInput = { ...sessionInput };
+      delete fallbackInput.scenario_id;
+      ({ data: sessionData, error: sessionError } = await supabase
+        .from('sales_voice_sessions')
+        .insert([fallbackInput])
+        .select('id'));
+    }
 
     if (sessionError) {
       console.error('[sales-api] failed to insert session', sessionError);
@@ -639,12 +653,21 @@ async function handleMessage(req, res) {
     if (!authContext) return;
     const { supabase, userId } = authContext;
 
-    const { data: existingSessions, error: sessionQueryError } = await supabase
+    let { data: existingSessions, error: sessionQueryError } = await supabase
       .from('sales_voice_sessions')
-      .select('id,user_id,difficulty,client_type,client_disc_type')
+      .select('id,user_id,difficulty,client_type,client_disc_type,scenario_id')
       .eq('id', sessionIdValue)
       .eq('user_id', userId)
       .limit(1);
+
+    if (sessionQueryError && isMissingColumnError(sessionQueryError, 'scenario_id')) {
+      ({ data: existingSessions, error: sessionQueryError } = await supabase
+        .from('sales_voice_sessions')
+        .select('id,user_id,difficulty,client_type,client_disc_type')
+        .eq('id', sessionIdValue)
+        .eq('user_id', userId)
+        .limit(1));
+    }
 
     if (sessionQueryError) {
       console.error('[sales-api] failed to verify session', sessionQueryError);
@@ -840,6 +863,7 @@ async function generateClientReply({
     triggers,
     maxQuestions,
     inputType,
+    scenarioContext: resolvedScenarioContext,
   });
   plan.replyMode = replyMode;
 
@@ -849,6 +873,7 @@ async function generateClientReply({
       clientType: plan.clientType,
       discUsed: plan.discUsed,
       tone: plan.tone,
+      scenario: plan.scenarioContext?.id || 'unknown',
       questions: plan.questions.length,
       triggers,
       inputType,
@@ -1064,6 +1089,7 @@ function buildSmallTalkPlan({ stage, salesmanCount }) {
  * @property {string[]} questions
  * @property {string} reaction
  * @property {"agree"|"postpone"|"decline"} [nextStepType]
+ * @property {{id: string, title: string, description: string, constraints: string[]}} scenarioContext
  */
 
 function buildReplyPlan({
@@ -1076,6 +1102,7 @@ function buildReplyPlan({
   triggers,
   maxQuestions,
   inputType,
+  scenarioContext,
 }) {
   const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
   const normalizedDifficulty = normalizeDifficulty(difficulty);
@@ -1095,6 +1122,7 @@ function buildReplyPlan({
       tone: 'friendly',
       goal: base.goal,
       constraints: [],
+      scenarioContext,
       questions: smallTalk.questions.slice(0, maxQuestions),
       reaction,
     };
@@ -1140,6 +1168,7 @@ function buildReplyPlan({
     tone: ruleSet.tone,
     goal: base.goal,
     constraints,
+    scenarioContext,
     questions,
     reaction: base.defaultReaction,
   };
@@ -1225,7 +1254,21 @@ async function renderPlanWithLLM(plan, latestMessage, maxQuestions, scenarioCont
   try {
     const llm = createLLMClient();
     const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepridávaj nové body.`;
+    const scenarioContext = plan?.scenarioContext;
+    const scenarioTitle = scenarioContext?.title || DEFAULT_SCENARIO.title;
+    const scenarioConstraints = Array.isArray(scenarioContext?.constraints)
+      ? scenarioContext.constraints.filter(Boolean)
+      : [];
+    const scenarioConstraintLines = scenarioConstraints.length
+      ? scenarioConstraints.map((constraint) => `- ${constraint}`)
+      : ['- -'];
+    const scenarioBlock = `Scenario context:
+TITLE: ${scenarioTitle}
+CONSTRAINTS:
+${scenarioConstraintLines.join('\n')}`;
+
     const developerPrompt = `ReplyPlan (JSON): ${JSON.stringify(plan)}
+${scenarioBlock}
 Reply mode: ${plan.replyMode}
 Max počet otázok: ${maxQuestions}
 Pravidlá:

@@ -121,7 +121,29 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
 
     try {
       const { error } = await supabase.from('sessions').insert([sessionData]);
-      if (error) throw error;
+      if (error) {
+        const errorMessage = error?.message?.toLowerCase() || '';
+        const isMissingScenarioColumn =
+          error?.code === '42703' ||
+          (errorMessage.includes('scenario_id') && errorMessage.includes('column'));
+        if (!isMissingScenarioColumn) {
+          throw error;
+        }
+
+        const fallbackSessionData = {
+          ...sessionData,
+          topic: selectedScenario.id,
+          industry: selectedScenario.id,
+        };
+        delete fallbackSessionData.scenario_id;
+
+        const { error: fallbackError } = await supabase
+          .from('sessions')
+          .insert([fallbackSessionData]);
+        if (fallbackError) {
+          throw fallbackError;
+        }
+      }
       
       navigate(`/session/${sessionId}`);
     } catch (error) {
