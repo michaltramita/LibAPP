@@ -12,6 +12,246 @@ const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
 const SESSION_OWNER_COLUMN = 'user_id';
 let missingSupabaseEnvLogged = false;
 
+const STAGES = ['intro', 'discovery', 'presentation', 'closing'];
+const DISC_TYPES = ['D', 'I', 'S', 'C'];
+const CLIENT_TYPES = ['new', 'repeat'];
+
+const BASE_BY_STAGE = {
+  intro: {
+    goal: 'Rýchlo kvalifikovať a pochopiť základ',
+    maxQuestions: 1,
+    forbiddenTopics: ['price', 'implementation'],
+    defaultReaction: 'Rozumiem.',
+  },
+  discovery: {
+    goal: 'Odkryť potreby a motivácie bez návrhu riešenia',
+    maxQuestions: 2,
+    forbiddenTopics: ['commitment', 'pricing'],
+    defaultReaction: 'Chápem.',
+  },
+  presentation: {
+    goal: 'Otestovať hodnotu a diferenciáciu',
+    maxQuestions: 1,
+    forbiddenTopics: ['closing'],
+    defaultReaction: 'Znie to zaujímavo.',
+  },
+  closing: {
+    goal: 'Dohodnúť ďalší krok alebo bezpečne odložiť',
+    maxQuestions: 1,
+    forbiddenTopics: [],
+    defaultReaction: 'Ďakujem za zhrnutie.',
+  },
+};
+
+const NEW_BY_STAGE = {
+  intro: {
+    tone: 'calm',
+    questionPools: [
+      'Povedzte mi jednou vetou, čo presne ponúkate a pre koho?',
+      'Aký problém to rieši a prečo je to dôležité teraz?',
+    ],
+    constraints: ['Zatiaľ len stručne, bez detailov o riešení.'],
+  },
+  discovery: {
+    tone: 'friendly',
+    questionPools: [
+      'Aký je dnes váš hlavný cieľ v tejto oblasti?',
+      'Čo sa stane, ak to necháte tak?',
+      'Podľa čoho budete hodnotiť úspech?',
+    ],
+    constraints: ['Najprv potrebujem pochopiť kontext.'],
+  },
+  presentation: {
+    tone: 'analytical',
+    questionPools: [
+      'V čom je vaše riešenie iné a aký to má dopad na výsledok?',
+      'Aké sú konkrétne parametre alebo dôkazy, ktoré to potvrdzujú?',
+    ],
+    constraints: ['Bez jasných dôkazov nepôjdem ďalej.'],
+  },
+  closing: {
+    tone: 'direct',
+    questionPools: [
+      'Čo navrhujete ako ďalší krok a kedy?',
+      'Kto ešte musí byť pri rozhodnutí a dokedy to viete posunúť?',
+    ],
+    constraints: ['Potrebujem jasný ďalší krok.'],
+  },
+};
+
+const REPEAT_BY_DISC_STAGE = {
+  D: {
+    intro: {
+      tone: 'direct',
+      questionPools: [
+        'Povedzte stručne, čo presne ponúkate a komu.',
+        'Aký konkrétny problém riešite teraz?',
+      ],
+      constraints: ['Bez omáčok, poďme na podstatu.'],
+      challengeStyle: 'concise',
+    },
+    discovery: {
+      tone: 'direct',
+      questionPools: [
+        'Aký je hlavný cieľ a do kedy?',
+        'Čo je dnes najväčší blokátor výsledku?',
+      ],
+      constraints: ['Chcem jasné priority a čas.'],
+      challengeStyle: 'pressure',
+    },
+    presentation: {
+      tone: 'direct',
+      questionPools: [
+        'V čom ste merateľne lepší a aký to má dopad?',
+        'Aké čísla to dokazujú?',
+      ],
+      constraints: ['Potrebujem merateľný dopad.'],
+      challengeStyle: 'results',
+    },
+    closing: {
+      tone: 'direct',
+      questionPools: [
+        'Aký je ďalší krok a kedy to vieme uzavrieť?',
+        'Kto rozhoduje a do kedy?',
+      ],
+      constraints: ['Chcem termín a zodpovednosť.'],
+      challengeStyle: 'decisive',
+    },
+  },
+  I: {
+    intro: {
+      tone: 'friendly',
+      questionPools: [
+        'Povedzte mi jednou vetou, komu najviac pomáhate.',
+        'Čo je na vašej ponuke najzaujímavejšie pre ľudí?',
+      ],
+      constraints: ['Krátko a zrozumiteľne.'],
+      challengeStyle: 'social',
+    },
+    discovery: {
+      tone: 'friendly',
+      questionPools: [
+        'Aký je váš hlavný cieľ a koho sa najviac týka?',
+        'Ako by to pocítil váš tím alebo zákazníci?',
+      ],
+      constraints: ['Zaujíma ma vplyv na ľudí.'],
+      challengeStyle: 'people',
+    },
+    presentation: {
+      tone: 'friendly',
+      questionPools: [
+        'V čom je to pre ľudí lepšie a ako to uvidia?',
+        'Aký konkrétny príklad výsledku viete uviesť?',
+      ],
+      constraints: ['Chcem príbeh a jasný výsledok.'],
+      challengeStyle: 'story',
+    },
+    closing: {
+      tone: 'friendly',
+      questionPools: [
+        'Čo navrhujete ako ďalší krok a kedy by sme to vedeli spraviť?',
+        'Kto ešte by mal byť v diskusii a dokedy?',
+      ],
+      constraints: ['Dohodnime jasný ďalší krok.'],
+      challengeStyle: 'relationship',
+    },
+  },
+  S: {
+    intro: {
+      tone: 'calm',
+      questionPools: [
+        'Povedzte pokojne, čo presne ponúkate a komu.',
+        'Aký problém to rieši a čo sa tým zlepší?',
+      ],
+      constraints: ['Zatiaľ len základné info.'],
+      challengeStyle: 'reassure',
+    },
+    discovery: {
+      tone: 'calm',
+      questionPools: [
+        'Aký je váš hlavný cieľ a čo by sa malo zlepšiť?',
+        'Čoho sa obávate, ak to necháte tak?',
+      ],
+      constraints: ['Chcem rozumieť rizikám.'],
+      challengeStyle: 'risk',
+    },
+    presentation: {
+      tone: 'calm',
+      questionPools: [
+        'V čom je vaše riešenie bezpečnejšie a stabilnejšie?',
+        'Aké máte dôkazy, že to funguje bez rizika?',
+      ],
+      constraints: ['Potrebujem istotu a stabilitu.'],
+      challengeStyle: 'safety',
+    },
+    closing: {
+      tone: 'calm',
+      questionPools: [
+        'Aký bezpečný ďalší krok navrhujete a kedy?',
+        'Kto ešte by mal byť v tom a dokedy to viete posunúť?',
+      ],
+      constraints: ['Preferujem jasný a bezpečný postup.'],
+      challengeStyle: 'careful',
+    },
+  },
+  C: {
+    intro: {
+      tone: 'analytical',
+      questionPools: [
+        'Zhrňte presne, čo ponúkate a pre koho.',
+        'Aký problém riešite a aké sú predpoklady?',
+      ],
+      constraints: ['Chcem presnosť a fakty.'],
+      challengeStyle: 'precision',
+    },
+    discovery: {
+      tone: 'analytical',
+      questionPools: [
+        'Aký je hlavný cieľ a ako ho budete merať?',
+        'Aké sú kľúčové premenné úspechu?',
+      ],
+      constraints: ['Potrebujem merateľné kritériá.'],
+      challengeStyle: 'metrics',
+    },
+    presentation: {
+      tone: 'analytical',
+      questionPools: [
+        'V čom je vaše riešenie merateľne lepšie?',
+        'Aké konkrétne dôkazy a metodiku máte?',
+      ],
+      constraints: ['Žiadam dôkazy a predpoklady.'],
+      challengeStyle: 'evidence',
+    },
+    closing: {
+      tone: 'analytical',
+      questionPools: [
+        'Aký je ďalší krok, zodpovednosti a termín?',
+        'Kto schvaľuje a aké sú podmienky?',
+      ],
+      constraints: ['Chcem jasné podmienky a termíny.'],
+      challengeStyle: 'structure',
+    },
+  },
+};
+
+const DIFFICULTY_MODIFIERS = {
+  beginner: {
+    addSkepticism: false,
+    requireEvidence: false,
+    simplifyLanguage: true,
+  },
+  advanced: {
+    addSkepticism: true,
+    requireEvidence: true,
+    simplifyLanguage: false,
+  },
+  expert: {
+    addSkepticism: true,
+    requireEvidence: true,
+    simplifyLanguage: false,
+  },
+};
+
 module.exports = async function handler(req, res) {
   setCorsHeaders(req, res);
 
@@ -478,36 +718,213 @@ async function generateClientReply({
   clientDiscType,
   salesmanCount,
 }) {
-  const fallbackMessage = 'Rozumiem. Pokračujte prosím.';
+  const triggers = detectTriggers(latestMessage, stage);
+  const plan = buildReplyPlan({
+    latestMessage,
+    stage,
+    difficulty,
+    clientType,
+    clientDiscType,
+    salesmanCount,
+    triggers,
+  });
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[sales-api] reply plan', {
+      stage: plan.stage,
+      clientType: plan.clientType,
+      discUsed: plan.discUsed,
+      tone: plan.tone,
+      questions: plan.questions.length,
+      triggers,
+    });
+  }
+
+  const rendered = await renderPlanWithLLM(plan, latestMessage);
+  if (rendered) {
+    return enforceMaxLength(rendered, 400);
+  }
+  return enforceMaxLength(renderPlanFallback(plan), 400);
+}
+
+function normalizeDifficulty(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'intermediate') return 'advanced';
+  if (ALLOWED_DIFFICULTIES.has(normalized)) return normalized;
+  return 'beginner';
+}
+
+function normalizeClientType(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (ALLOWED_CLIENT_TYPES.has(normalized)) return normalized;
+  return 'new';
+}
+
+function normalizeDisc(value) {
+  const normalized = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (ALLOWED_CLIENT_DISC_TYPES.has(normalized)) return normalized;
+  return 'D';
+}
+
+/**
+ * @typedef {Object} ReplyPlan
+ * @property {"sk"} language
+ * @property {"intro"|"discovery"|"presentation"|"closing"} stage
+ * @property {"new"|"repeat"} clientType
+ * @property {"neutral"|"D"|"I"|"S"|"C"} discUsed
+ * @property {"direct"|"friendly"|"calm"|"analytical"} tone
+ * @property {string} goal
+ * @property {string[]} constraints
+ * @property {string[]} questions
+ * @property {string} reaction
+ * @property {"agree"|"postpone"|"decline"} [nextStepType]
+ */
+
+function buildReplyPlan({
+  latestMessage,
+  stage,
+  difficulty,
+  clientType,
+  clientDiscType,
+  salesmanCount,
+  triggers,
+}) {
+  const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
   const normalizedDifficulty = normalizeDifficulty(difficulty);
   const normalizedClientType = normalizeClientType(clientType);
-  const normalizedDiscType = normalizeDisc(clientDiscType);
-  const maxChars = 1200;
-  const maxChunks = 200;
+  const base = BASE_BY_STAGE[normalizedStage];
+  const resolvedTriggers = triggers || detectTriggers(latestMessage, normalizedStage);
+  const difficultyModifiers = DIFFICULTY_MODIFIERS[normalizedDifficulty];
 
+  let ruleSet;
+  let discUsed = 'neutral';
+  if (normalizedClientType === 'new') {
+    ruleSet = NEW_BY_STAGE[normalizedStage];
+  } else {
+    let resolvedDisc = normalizeDisc(clientDiscType);
+    if (!clientDiscType && process.env.NODE_ENV !== 'production') {
+      console.log('[sales-api] missing disc type, defaulting to D');
+    }
+    if (!DISC_TYPES.includes(resolvedDisc)) {
+      resolvedDisc = 'D';
+    }
+    discUsed = resolvedDisc;
+    ruleSet = REPEAT_BY_DISC_STAGE[resolvedDisc][normalizedStage];
+  }
+
+  const questions = selectQuestions({
+    stage: normalizedStage,
+    difficulty: normalizedDifficulty,
+    questionPool: ruleSet.questionPools,
+    salesmanCount,
+  });
+
+  const constraints = [...ruleSet.constraints];
+  if (difficultyModifiers.requireEvidence && normalizedStage === 'presentation') {
+    constraints.push('Bez konkrétnych metrík to nepovažujem za overené.');
+  }
+  if (difficultyModifiers.addSkepticism && normalizedStage === 'discovery') {
+    constraints.push('Potrebujem to podložiť konkrétnymi faktami.');
+  }
+
+  let plan = {
+    language: 'sk',
+    stage: normalizedStage,
+    clientType: normalizedClientType,
+    discUsed,
+    tone: ruleSet.tone,
+    goal: base.goal,
+    constraints,
+    questions,
+    reaction: base.defaultReaction,
+  };
+
+  plan = applyTriggers(plan, resolvedTriggers);
+
+  if (plan.stage === 'intro') {
+    plan.constraints = [];
+  }
+
+  if (plan.stage === 'closing') {
+    plan.nextStepType = resolveNextStepType(resolvedTriggers);
+  }
+
+  plan.questions = plan.questions.slice(0, base.maxQuestions);
+  return plan;
+}
+
+function selectQuestions({ stage, difficulty, questionPool, salesmanCount }) {
+  const base = BASE_BY_STAGE[stage];
+  const maxQuestions = base.maxQuestions;
+  const pickIndex = Math.abs(salesmanCount || 0) % questionPool.length;
+  const primary = questionPool[pickIndex];
+
+  if (stage === 'discovery') {
+    if (difficulty === 'beginner') {
+      return [primary];
+    }
+    const secondary = questionPool[(pickIndex + 1) % questionPool.length];
+    return [primary, secondary];
+  }
+
+  return [primary].slice(0, maxQuestions);
+}
+
+function detectTriggers(latestMessage, stage) {
+  const message = typeof latestMessage === 'string' ? latestMessage.trim() : '';
+  const lower = message.toLowerCase();
+  const hasNumbers = /\d/.test(message);
+  const hasExample = lower.includes('príklad') || lower.includes('napr') || lower.includes('napríklad');
+  const tooVague = message.length < 60 || (!hasNumbers && !hasExample);
+  const askedGoodQuestion =
+    /(\bčo\b|\bako\b|\bprečo\b|\bkoľko\b|\bkedy\b)/i.test(lower) && message.endsWith('?');
+  const proposedNextStep = /(navrhujem|ďalší krok|kedy môžeme|dohodnime|stretnutie)/i.test(lower);
+  const jumpedToPitch =
+    (stage === 'intro' || stage === 'discovery') &&
+    /(naše riešenie|platforma|implementácia|funkcia|balík|cenník|cena|pitch)/i.test(lower);
+
+  return {
+    tooVague,
+    askedGoodQuestion,
+    proposedNextStep,
+    jumpedToPitch,
+  };
+}
+
+function applyTriggers(plan, triggers) {
+  const nextPlan = { ...plan };
+  const constraintSet = new Set(nextPlan.constraints);
+
+  if (triggers.tooVague) {
+    constraintSet.add('Potrebujem konkrétnejšie údaje, nie všeobecné tvrdenia.');
+  }
+  if (triggers.jumpedToPitch) {
+    constraintSet.add('Zatiaľ sa držme potrieb, nie riešenia.');
+  }
+  if (triggers.askedGoodQuestion) {
+    nextPlan.reaction = 'Dobrá otázka, vďaka.';
+  }
+
+  nextPlan.constraints = Array.from(constraintSet);
+  return nextPlan;
+}
+
+function resolveNextStepType(triggers) {
+  if (triggers.proposedNextStep) return 'agree';
+  if (triggers.tooVague || triggers.jumpedToPitch) return 'postpone';
+  return 'agree';
+}
+
+async function renderPlanWithLLM(plan, latestMessage) {
   try {
     const llm = createLLMClient();
-    const systemPrompt = `Si simulovaný biznis klient v obchodnom rozhovore.
-Tvoje správanie závisí od:
-- DISC typu (D/I/S/C)
-- úrovne náročnosti (beginner / advanced / expert)
-- aktuálnej fázy predaja
-
-Musíš:
-- odpovedať realisticky v slovenčine
-- držať odpoveď na 2–4 vety
-- vždy položiť 1 otázku, okrem fázy "closing" kde žiadaš ďalší krok/CTA
-- nikdy neprezrádzať, že si AI
-- nikdy neškoľ obchodníka`;
-
-    const developerPrompt = [
-      'Context:',
-      `- difficulty: ${normalizedDifficulty}`,
-      `- client_type: ${normalizedClientType}`,
-      `- client_disc_type: ${normalizedDiscType}`,
-      `- salesman_message_count: ${salesmanCount}`,
-      `- stage: ${stage}`,
-    ].join('\n');
+    const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepřidávaj nové body.`;
+    const developerPrompt = `ReplyPlan (JSON): ${JSON.stringify(plan)}
+Pravidlá:
+- Odpoveď musí byť po slovensky.
+- Drž sa otázok, reakcie, constraints a nextStepType.
+- Žiadne školenie obchodníka ani meta poznámky.
+- Max 400 znakov.`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -517,6 +934,7 @@ Musíš:
 
     let buffer = '';
     let chunks = 0;
+    const maxChunks = 200;
     for await (const chunk of llm.streamChat({ messages })) {
       chunks += 1;
       if (chunk.type === 'token' && chunk.content) {
@@ -531,33 +949,50 @@ Musíš:
       }
     }
 
-    let finalReply = typeof buffer === 'string' ? buffer.trim() : '';
-    if (finalReply.length > maxChars) {
-      finalReply = finalReply.slice(0, maxChars).trim();
-    }
-    return finalReply || fallbackMessage;
+    const finalReply = typeof buffer === 'string' ? buffer.trim() : '';
+    return finalReply || null;
   } catch (error) {
-    console.error('[sales-api] llm reply failed', error);
-    return fallbackMessage;
+    console.error('[sales-api] llm render failed', error);
+    return null;
   }
 }
 
-function normalizeDifficulty(value) {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (normalized === 'intermediate') return 'advanced';
-  if (ALLOWED_DIFFICULTIES.has(normalized)) return normalized;
-  return 'beginner';
+function renderPlanFallback(plan) {
+  const parts = [];
+  if (plan.reaction) {
+    parts.push(plan.reaction);
+  }
+  if (plan.constraints.length) {
+    parts.push(plan.constraints[0]);
+  }
+  if (plan.questions.length) {
+    parts.push(plan.questions.join(' '));
+  }
+
+  if (plan.stage === 'closing') {
+    parts.push(resolveClosingEnding(plan));
+  }
+
+  return parts.join(' ').trim();
 }
 
-function normalizeClientType(value) {
-  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (normalized === 'repeat') return 'existing';
-  if (ALLOWED_CLIENT_TYPES.has(normalized)) return normalized;
-  return 'new';
+function resolveClosingEnding(plan) {
+  const endings = {
+    agree: 'Navrhujem ďalší krok: krátke potvrdenie a termín do 7 dní.',
+    postpone: 'Zatiaľ to nechajme otvorené, pošlite mi doplnenia a vráťme sa k tomu do 2 týždňov.',
+    decline: 'Momentálne do toho nepôjdem, ďakujem za čas.',
+  };
+  return endings[plan.nextStepType] || endings.agree;
 }
 
-function normalizeDisc(value) {
-  const normalized = typeof value === 'string' ? value.trim().toUpperCase() : '';
-  if (ALLOWED_CLIENT_DISC_TYPES.has(normalized)) return normalized;
-  return 'D';
+function enforceMaxLength(text, limit) {
+  if (!text) return '';
+  const trimmed = text.trim();
+  if (trimmed.length <= limit) return trimmed;
+  const sliced = trimmed.slice(0, limit);
+  const lastStop = Math.max(sliced.lastIndexOf('.'), sliced.lastIndexOf('!'), sliced.lastIndexOf('?'));
+  if (lastStop > 50) {
+    return sliced.slice(0, lastStop + 1).trim();
+  }
+  return sliced.trim();
 }
