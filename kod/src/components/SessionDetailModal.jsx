@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Award, Target, TrendingUp, Users, BarChartHorizontal, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Transcript from '@/components/Transcript';
+import { resolveScenarioForSession } from '@/utils/salesScenarios';
 
 const ScoreCircle = ({ score = 0 }) => {
   const getScoreColor = (s) => {
@@ -107,7 +108,8 @@ const SessionDetailModal = ({ open, onOpenChange, sessionDetails }) => {
     feedback = sessionDetails.feedback;
   }
   
-  const { score, transcript, topic } = sessionDetails;
+  const { score, transcript } = sessionDetails;
+  const scenarioTitle = resolveScenarioForSession(sessionDetails).title;
   const { personalizedMessage, dimensions = [], nextSteps } = feedback;
 
   // Split nextSteps into a list of bullet points by sentences (periods)
@@ -122,7 +124,7 @@ const SessionDetailModal = ({ open, onOpenChange, sessionDetails }) => {
           <div className="w-full md:w-1/2 p-6 overflow-y-auto">
             <DialogHeader className="mb-6 text-left">
               <DialogTitle className="text-2xl font-bold">Detail rozhovoru</DialogTitle>
-              <DialogDescription>{topic}</DialogDescription>
+              <DialogDescription>{scenarioTitle}</DialogDescription>
             </DialogHeader>
 
             <div className="flex flex-col sm:flex-row items-center gap-6 mb-6 bg-slate-50 p-4 rounded-xl border">

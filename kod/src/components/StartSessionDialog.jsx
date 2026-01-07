@@ -8,7 +8,13 @@ import {
   DialogDescription
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Loader2, Target, Users, Briefcase, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -16,6 +22,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { resolveScenarioById, SALES_SCENARIOS } from '@/utils/salesScenarios';
 
 export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const { user } = useAuth();
@@ -25,7 +32,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const [experienceLevel, setExperienceLevel] = useState(null);
   const [clientCategory, setClientCategory] = useState(null);
   const [clientType, setClientType] = useState(null);
-  const [topic, setTopic] = useState('');
+  const [scenarioId, setScenarioId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const normalizeDifficulty = (raw) => {
@@ -56,7 +63,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
       );
       setClientCategory(null);
       setClientType(null);
-      setTopic('');
+      setScenarioId('');
       setIsLoading(false);
     }
   }, [open, user]);
@@ -71,16 +78,26 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
     const normalizedClientCategory = normalizeClientType(clientCategory);
     const normalizedDifficulty = normalizeDifficulty(experienceLevel);
     const normalizedDisc = normalizeDisc(clientType, normalizedClientCategory);
+    const selectedScenario = resolveScenarioById(scenarioId) || null;
 
     if (
       !experienceLevel ||
       !clientCategory ||
-      !topic.trim() ||
+      !scenarioId ||
       (normalizedClientCategory === 'repeat' && !normalizedDisc)
     ) {
       toast({
         title: "Chýbajúce informácie",
         description: "Prosím, vyplňte všetky parametre simulácie.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedScenario) {
+      toast({
+        title: "Chýbajúce informácie",
+        description: "Prosím, vyberte tréningovú situáciu.",
         variant: "destructive",
       });
       return;
@@ -95,16 +112,39 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
       module_code: moduleCode,
       status: 'started',
       started_at: new Date().toISOString(),
-      topic: topic.trim(),
+      topic: selectedScenario.title,
+      scenario_id: selectedScenario.id,
       client_type: normalizedClientCategory,
       client_disc_type: normalizedDisc,
       difficulty: normalizedDifficulty,
-      industry: topic.trim(), // Mapping topic to industry
+      industry: selectedScenario.title,
     };
 
     try {
       const { error } = await supabase.from('sessions').insert([sessionData]);
-      if (error) throw error;
+      if (error) {
+        const errorMessage = error?.message?.toLowerCase() || '';
+        const isMissingScenarioColumn =
+          error?.code === '42703' ||
+          (errorMessage.includes('scenario_id') && errorMessage.includes('column'));
+        if (!isMissingScenarioColumn) {
+          throw error;
+        }
+
+        const fallbackSessionData = {
+          ...sessionData,
+          topic: selectedScenario.id,
+          industry: selectedScenario.id,
+        };
+        delete fallbackSessionData.scenario_id;
+
+        const { error: fallbackError } = await supabase
+          .from('sessions')
+          .insert([fallbackSessionData]);
+        if (fallbackError) {
+          throw fallbackError;
+        }
+      }
       
       navigate(`/session/${sessionId}`);
     } catch (error) {
@@ -121,7 +161,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const isFormValid =
     experienceLevel &&
     clientCategory &&
-    topic.trim() &&
+    scenarioId &&
     (clientCategory === 'new' || (clientCategory === 'repeat' && clientType));
 
   const experienceLevels = [
@@ -253,16 +293,25 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
             <div className="space-y-4 pb-4">
               <h3 className="flex items-center gap-3 text-lg font-semibold text-white">
                 <Briefcase className="w-5 h-5 text-white opacity-80" />
-                Odvetvie a téma stretnutia
+                Tréningová situácia
               </h3>
-              <Textarea
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="napr. predaj CRM systému pre malé firmy, B2B softvér pre výrobnú firmu..."
-                className="min-h-[80px] rounded-2xl border-white/50 bg-white/10 text-white placeholder:text-white/70 focus:bg-white focus:text-slate-900 focus:ring-white"
-              />
+              <Select value={scenarioId} onValueChange={setScenarioId}>
+                <SelectTrigger className="rounded-2xl border-white/50 bg-white/10 text-white focus:ring-white">
+                  <SelectValue placeholder="Vyberte scenár" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {SALES_SCENARIOS.map((scenario) => (
+                    <SelectItem key={scenario.id} value={scenario.id}>
+                      <div className="flex flex-col">
+                        <span className="font-semibold">{scenario.title}</span>
+                        <span className="text-xs text-slate-500">{scenario.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-sm text-white px-2 opacity-90">
-                Popíšte čo predávate a komu – čím konkrétnejšie, tým realistickejšia simulácia.
+                Vyberte si scenár, na ktorom chcete trénovať.
               </p>
             </div>
           </div>
