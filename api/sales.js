@@ -584,6 +584,9 @@ function normalizeScenarioKey(value) {
   if (!SCENARIO_KEY_PATTERN.test(trimmed)) {
     return { value: null, error: 'invalid_format' };
   }
+  if (!Object.prototype.hasOwnProperty.call(SCENARIOS, trimmed)) {
+    return { value: null, error: 'unknown_key' };
+  }
   return { value: trimmed, error: null };
 }
 
@@ -668,6 +671,14 @@ async function handleMessage(req, res) {
       .limit(1);
 
     if (sessionQueryError) {
+      if (isMissingColumnError(sessionQueryError, 'scenario_key')) {
+        console.error(
+          '[sales-api] missing scenario_key column on session query',
+          sessionQueryError
+        );
+        res.status(500).json({ ok: false, error: 'missing_column', details: 'scenario_key' });
+        return;
+      }
       console.error('[sales-api] failed to verify session', sessionQueryError);
       handleSupabaseFailure(res, sessionQueryError, 'Unable to verify session');
       return;
@@ -1432,4 +1443,26 @@ function enforceMaxLength(text, limit) {
     return sliced.slice(0, lastStop + 1).trim();
   }
   return sliced.trim();
+}
+
+function isMissingColumnError(err, columnName) {
+  if (!err) return false;
+  const code = err.code ? String(err.code) : '';
+  const pieces = [err.message, err.details, err.hint].filter((value) => typeof value === 'string');
+  const haystack = pieces.join(' ').toLowerCase();
+  const normalizedColumn =
+    typeof columnName === 'string' && columnName.trim() ? columnName.trim().toLowerCase() : '';
+  const hasColumnName = normalizedColumn ? haystack.includes(normalizedColumn) : true;
+  if (code === '42703') {
+    return hasColumnName;
+  }
+  const missingSignals = [
+    "could not find the",
+    'column does not exist',
+    'does not exist',
+    'missing column',
+    'schema cache',
+  ];
+  const hasMissingSignal = missingSignals.some((signal) => haystack.includes(signal));
+  return hasMissingSignal && hasColumnName;
 }
