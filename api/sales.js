@@ -5,6 +5,8 @@ const { rateLimit } = require('./lib/rateLimit');
 
 const MAX_CONTENT_LENGTH = 1000;
 const MAX_ID_LENGTH = 128;
+const MAX_SCENARIO_KEY_LENGTH = 128;
+const SCENARIO_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const ALLOWED_DIFFICULTIES = new Set(['beginner', 'advanced', 'expert']);
 const ALLOWED_CLIENT_TYPES = new Set(['new', 'repeat']);
 const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
@@ -454,15 +456,15 @@ async function handleSession(req, res) {
   const scenarioKeyInput =
     typeof body.scenario_key === 'string'
       ? body.scenario_key
-      : typeof body.scenarioId === 'string'
-        ? body.scenarioId
-        : typeof body.scenario_id === 'string'
-          ? body.scenario_id
-          : null;
-  const scenarioKey =
-    typeof scenarioKeyInput === 'string' && scenarioKeyInput.trim()
-      ? scenarioKeyInput.trim()
-      : null;
+      : typeof body.scenarioKey === 'string'
+        ? body.scenarioKey
+        : null;
+  const scenarioKeyResult = normalizeScenarioKey(scenarioKeyInput);
+  if (scenarioKeyResult.error) {
+    res.status(400).json({ ok: false, error: 'invalid_scenario_key' });
+    return;
+  }
+  const scenarioKey = scenarioKeyResult.value;
   const moduleValue =
     typeof body.module === 'string' && body.module.trim()
       ? body.module.trim()
@@ -510,6 +512,7 @@ async function handleSession(req, res) {
       difficulty,
       client_type: clientType,
       client_disc_type: clientDiscType,
+      scenario_key: scenarioKey,
       user_id: userId,
     };
 
@@ -534,19 +537,6 @@ async function handleSession(req, res) {
       console.error('[sales-api] session created but missing id', { sessionData });
       res.status(500).json({ ok: false, error: 'missing_session_id' });
       return;
-    }
-
-    if (scenarioKey) {
-      const markerMessage = `SCENARIO_KEY=${scenarioKey}`;
-      const { error: scenarioMessageError } = await supabase
-        .from('sales_voice_messages')
-        .insert([{ session_id: sessionId, role: 'system', content: markerMessage }]);
-
-      if (scenarioMessageError) {
-        console.error('[sales-api] failed to insert scenario context', scenarioMessageError);
-        handleSupabaseFailure(res, scenarioMessageError, 'Unable to store scenario context');
-        return;
-      }
     }
 
     if (process.env.NODE_ENV !== 'production') {
@@ -578,6 +568,23 @@ function resolveScenario(key) {
     return SCENARIOS[normalized];
   }
   return SCENARIOS[DEFAULT_SCENARIO_KEY];
+}
+
+function normalizeScenarioKey(value) {
+  if (typeof value !== 'string') {
+    return { value: DEFAULT_SCENARIO_KEY, error: null };
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { value: DEFAULT_SCENARIO_KEY, error: null };
+  }
+  if (trimmed.length > MAX_SCENARIO_KEY_LENGTH) {
+    return { value: null, error: 'too_long' };
+  }
+  if (!SCENARIO_KEY_PATTERN.test(trimmed)) {
+    return { value: null, error: 'invalid_format' };
+  }
+  return { value: trimmed, error: null };
 }
 
 function buildScenarioSystemMessage(scenario) {
@@ -625,7 +632,12 @@ async function handleMessage(req, res) {
     return;
   }
 
-  const allowedRoles = ['salesman', 'client', 'system'];
+  if (roleValue === 'system') {
+    res.status(403).json({ ok: false, error: 'forbidden_role' });
+    return;
+  }
+
+  const allowedRoles = ['salesman', 'client'];
   if (!allowedRoles.includes(roleValue)) {
     const details = `Invalid role: ${roleValue}`;
     console.warn(`[sales] message validation failed: ${details}`);
@@ -650,23 +662,10 @@ async function handleMessage(req, res) {
 
     let { data: existingSessions, error: sessionQueryError } = await supabase
       .from('sales_voice_sessions')
-      .select('id,user_id,difficulty,client_type,client_disc_type,scenario_id,scenario_key')
+      .select('id,user_id,difficulty,client_type,client_disc_type,scenario_key')
       .eq('id', sessionIdValue)
       .eq('user_id', userId)
       .limit(1);
-
-    if (
-      sessionQueryError &&
-      (isMissingColumnError(sessionQueryError, 'scenario_id') ||
-        isMissingColumnError(sessionQueryError, 'scenario_key'))
-    ) {
-      ({ data: existingSessions, error: sessionQueryError } = await supabase
-        .from('sales_voice_sessions')
-        .select('id,user_id,difficulty,client_type,client_disc_type')
-        .eq('id', sessionIdValue)
-        .eq('user_id', userId)
-        .limit(1));
-    }
 
     if (sessionQueryError) {
       console.error('[sales-api] failed to verify session', sessionQueryError);
@@ -720,35 +719,10 @@ async function handleMessage(req, res) {
       );
     }
 
-    const sessionScenarioValue =
+    const scenarioKey =
       typeof session.scenario_key === 'string' && session.scenario_key.trim()
         ? session.scenario_key.trim()
-        : typeof session.scenario_id === 'string' && session.scenario_id.trim()
-          ? session.scenario_id.trim()
-          : null;
-    let scenarioKey = sessionScenarioValue;
-
-    if (!scenarioKey) {
-      const { data: scenarioMessages, error: scenarioMessageError } = await supabase
-        .from('sales_voice_messages')
-        .select('content')
-        .eq('session_id', sessionIdValue)
-        .eq('role', 'system')
-        .like('content', 'SCENARIO_KEY=%')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (scenarioMessageError) {
-        console.error('[sales-api] failed to fetch scenario key context', scenarioMessageError);
-        handleSupabaseFailure(res, scenarioMessageError, 'Unable to load scenario context');
-        return;
-      }
-
-      const markerContent = scenarioMessages?.[0]?.content || '';
-      scenarioKey = markerContent.startsWith('SCENARIO_KEY=')
-        ? markerContent.replace('SCENARIO_KEY=', '').trim()
-        : null;
-    }
+        : DEFAULT_SCENARIO_KEY;
 
     const scenarioContext = buildScenarioSystemMessage(resolveScenario(scenarioKey));
 
@@ -760,6 +734,7 @@ async function handleMessage(req, res) {
       clientDiscType: session.client_disc_type,
       salesmanCount,
       scenarioContext,
+      scenarioKey,
     });
 
     const { error: clientMessageError } = await supabase
@@ -851,11 +826,16 @@ async function generateClientReply({
   clientDiscType,
   salesmanCount,
   scenarioContext,
+  scenarioKey,
 }) {
   const resolvedScenarioContext =
     typeof scenarioContext === 'string' && scenarioContext.trim()
       ? scenarioContext.trim()
       : buildScenarioSystemMessage(resolveScenario());
+  const resolvedScenarioKey =
+    typeof scenarioKey === 'string' && scenarioKey.trim()
+      ? scenarioKey.trim()
+      : DEFAULT_SCENARIO_KEY;
   const inputType = classifySalesmanInput(latestMessage);
   const replyMode = resolveReplyMode({
     inputType,
@@ -900,7 +880,8 @@ async function generateClientReply({
     plan,
     latestMessage,
     maxQuestions,
-    resolvedScenarioContext
+    resolvedScenarioContext,
+    resolvedScenarioKey
   );
   if (rendered) {
     return enforceMaxLength(rendered, 400);
@@ -1264,7 +1245,13 @@ function resolveNextStepType(triggers) {
   return 'agree';
 }
 
-async function renderPlanWithLLM(plan, latestMessage, maxQuestions, scenarioContext) {
+async function renderPlanWithLLM(
+  plan,
+  latestMessage,
+  maxQuestions,
+  scenarioContext,
+  scenarioKey
+) {
   try {
     const llm = createLLMClient();
     const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepridávaj nové body.`;
@@ -1281,7 +1268,13 @@ TITLE: ${scenarioTitle}
 CONSTRAINTS:
 ${scenarioConstraintLines.join('\n')}`;
 
+    const resolvedScenarioKey =
+      typeof scenarioKey === 'string' && scenarioKey.trim()
+        ? scenarioKey.trim()
+        : DEFAULT_SCENARIO_KEY;
     const developerPrompt = `ReplyPlan (JSON): ${JSON.stringify(plan)}
+Scenario key:
+- scenario_key: ${resolvedScenarioKey}
 ${scenarioBlock}
 Reply mode: ${plan.replyMode}
 Max počet otázok: ${maxQuestions}
