@@ -451,9 +451,17 @@ async function handleSession(req, res) {
     typeof body.client_disc_type === 'string' && body.client_disc_type.trim()
       ? body.client_disc_type.trim()
       : null;
+  const scenarioKeyInput =
+    typeof body.scenario_key === 'string'
+      ? body.scenario_key
+      : typeof body.scenarioId === 'string'
+        ? body.scenarioId
+        : typeof body.scenario_id === 'string'
+          ? body.scenario_id
+          : null;
   const scenarioKey =
-    typeof body.scenario_key === 'string' && body.scenario_key.trim()
-      ? body.scenario_key.trim()
+    typeof scenarioKeyInput === 'string' && scenarioKeyInput.trim()
+      ? scenarioKeyInput.trim()
       : null;
   const moduleValue =
     typeof body.module === 'string' && body.module.trim()
@@ -502,31 +510,17 @@ async function handleSession(req, res) {
       difficulty,
       client_type: clientType,
       client_disc_type: clientDiscType,
-      scenario_id: scenarioId,
       user_id: userId,
     };
-
-    if (!scenarioId) {
-      delete sessionInput.scenario_id;
-    }
 
     if (requestedSessionId) {
       sessionInput.id = requestedSessionId;
     }
 
-    let { data: sessionData, error: sessionError } = await supabase
+    const { data: sessionData, error: sessionError } = await supabase
       .from('sales_voice_sessions')
       .insert([sessionInput])
       .select('id');
-
-    if (sessionError && scenarioId && isMissingColumnError(sessionError, 'scenario_id')) {
-      const fallbackInput = { ...sessionInput };
-      delete fallbackInput.scenario_id;
-      ({ data: sessionData, error: sessionError } = await supabase
-        .from('sales_voice_sessions')
-        .insert([fallbackInput])
-        .select('id'));
-    }
 
     if (sessionError) {
       console.error('[sales-api] failed to insert session', sessionError);
@@ -542,16 +536,17 @@ async function handleSession(req, res) {
       return;
     }
 
-    const scenario = resolveScenario(scenarioKey);
-    const scenarioMessage = buildScenarioSystemMessage(scenario);
-    const { error: scenarioMessageError } = await supabase
-      .from('sales_voice_messages')
-      .insert([{ session_id: sessionId, role: 'system', content: scenarioMessage }]);
+    if (scenarioKey) {
+      const markerMessage = `SCENARIO_KEY=${scenarioKey}`;
+      const { error: scenarioMessageError } = await supabase
+        .from('sales_voice_messages')
+        .insert([{ session_id: sessionId, role: 'system', content: markerMessage }]);
 
-    if (scenarioMessageError) {
-      console.error('[sales-api] failed to insert scenario context', scenarioMessageError);
-      handleSupabaseFailure(res, scenarioMessageError, 'Unable to store scenario context');
-      return;
+      if (scenarioMessageError) {
+        console.error('[sales-api] failed to insert scenario context', scenarioMessageError);
+        handleSupabaseFailure(res, scenarioMessageError, 'Unable to store scenario context');
+        return;
+      }
     }
 
     if (process.env.NODE_ENV !== 'production') {
@@ -655,12 +650,16 @@ async function handleMessage(req, res) {
 
     let { data: existingSessions, error: sessionQueryError } = await supabase
       .from('sales_voice_sessions')
-      .select('id,user_id,difficulty,client_type,client_disc_type,scenario_id')
+      .select('id,user_id,difficulty,client_type,client_disc_type,scenario_id,scenario_key')
       .eq('id', sessionIdValue)
       .eq('user_id', userId)
       .limit(1);
 
-    if (sessionQueryError && isMissingColumnError(sessionQueryError, 'scenario_id')) {
+    if (
+      sessionQueryError &&
+      (isMissingColumnError(sessionQueryError, 'scenario_id') ||
+        isMissingColumnError(sessionQueryError, 'scenario_key'))
+    ) {
       ({ data: existingSessions, error: sessionQueryError } = await supabase
         .from('sales_voice_sessions')
         .select('id,user_id,difficulty,client_type,client_disc_type')
@@ -721,22 +720,37 @@ async function handleMessage(req, res) {
       );
     }
 
-    const { data: scenarioMessages, error: scenarioMessageError } = await supabase
-      .from('sales_voice_messages')
-      .select('content')
-      .eq('session_id', sessionIdValue)
-      .eq('role', 'system')
-      .order('created_at', { ascending: true })
-      .limit(1);
+    const sessionScenarioValue =
+      typeof session.scenario_key === 'string' && session.scenario_key.trim()
+        ? session.scenario_key.trim()
+        : typeof session.scenario_id === 'string' && session.scenario_id.trim()
+          ? session.scenario_id.trim()
+          : null;
+    let scenarioKey = sessionScenarioValue;
 
-    if (scenarioMessageError) {
-      console.error('[sales-api] failed to fetch scenario context', scenarioMessageError);
-      handleSupabaseFailure(res, scenarioMessageError, 'Unable to load scenario context');
-      return;
+    if (!scenarioKey) {
+      const { data: scenarioMessages, error: scenarioMessageError } = await supabase
+        .from('sales_voice_messages')
+        .select('content')
+        .eq('session_id', sessionIdValue)
+        .eq('role', 'system')
+        .like('content', 'SCENARIO_KEY=%')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (scenarioMessageError) {
+        console.error('[sales-api] failed to fetch scenario key context', scenarioMessageError);
+        handleSupabaseFailure(res, scenarioMessageError, 'Unable to load scenario context');
+        return;
+      }
+
+      const markerContent = scenarioMessages?.[0]?.content || '';
+      scenarioKey = markerContent.startsWith('SCENARIO_KEY=')
+        ? markerContent.replace('SCENARIO_KEY=', '').trim()
+        : null;
     }
 
-    const scenarioContext =
-      scenarioMessages?.[0]?.content || buildScenarioSystemMessage(resolveScenario());
+    const scenarioContext = buildScenarioSystemMessage(resolveScenario(scenarioKey));
 
     const clientReplyText = await generateClientReply({
       latestMessage: contentValue,
