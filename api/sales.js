@@ -1,4 +1,5 @@
 const { createUserSupabaseClient, getSupabaseEnvError } = require('./lib/supabaseClient');
+const { createLLMClient } = require('./lib/llmClient');
 const { getJsonBody, getClientIp } = require('./lib/requestUtils');
 const { rateLimit } = require('./lib/rateLimit');
 
@@ -322,7 +323,7 @@ async function handleMessage(req, res) {
 
     const { data: existingSessions, error: sessionQueryError } = await supabase
       .from('sales_voice_sessions')
-      .select('id,user_id')
+      .select('id,user_id,difficulty,client_type,client_disc_type')
       .eq('id', sessionIdValue)
       .eq('user_id', userId)
       .limit(1);
@@ -371,24 +372,22 @@ async function handleMessage(req, res) {
       return;
     }
 
-    let clientReplyText = 'Rozumiem. Povedzte mi o tom viac.';
-    let stage = 'intro';
+    const stage = resolveStage(salesmanCount);
 
-    if (salesmanCount === 1) {
-      clientReplyText = 'Dobrý deň. Povedzte mi stručne, čo ponúkate a komu.';
-      stage = 'intro';
-    } else if (salesmanCount <= 3) {
-      clientReplyText = 'Rozumiem. Aké sú pre vás najdôležitejšie potreby alebo ciele, ktoré chcete týmto riešiť?';
-      stage = 'discovery';
-    } else if (salesmanCount <= 5) {
-      clientReplyText = 'OK. V čom je vaša ponuka iná než bežné riešenia a aký to má dopad na výsledky?';
-      stage = 'presentation';
-    } else if (salesmanCount >= 6) {
-      clientReplyText = 'Dobre. Aký je ďalší konkrétny krok, ktorý navrhujete?';
-      stage = 'closing';
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(
+        `[sales] reply stage=${stage} disc=${session.client_disc_type || 'unknown'} salesmanCount=${salesmanCount}`
+      );
     }
 
-    console.log(`[sales] reply stage=${stage} salesmanCount=${salesmanCount}`);
+    const clientReplyText = await generateClientReply({
+      latestMessage: contentValue,
+      stage,
+      difficulty: session.difficulty,
+      clientType: session.client_type,
+      clientDiscType: session.client_disc_type,
+      salesmanCount,
+    });
 
     const { error: clientMessageError } = await supabase
       .from('sales_voice_messages')
@@ -462,4 +461,103 @@ function stripOwnershipFields(body) {
   if (SESSION_OWNER_COLUMN !== 'user_id' && Object.prototype.hasOwnProperty.call(body, SESSION_OWNER_COLUMN)) {
     delete body[SESSION_OWNER_COLUMN];
   }
+}
+
+function resolveStage(salesmanCount) {
+  if (salesmanCount === 1) return 'intro';
+  if (salesmanCount <= 3) return 'discovery';
+  if (salesmanCount <= 5) return 'presentation';
+  return 'closing';
+}
+
+async function generateClientReply({
+  latestMessage,
+  stage,
+  difficulty,
+  clientType,
+  clientDiscType,
+  salesmanCount,
+}) {
+  const fallbackMessage = 'Rozumiem. Pokračujte prosím.';
+  const normalizedDifficulty = normalizeDifficulty(difficulty);
+  const normalizedClientType = normalizeClientType(clientType);
+  const normalizedDiscType = normalizeDisc(clientDiscType);
+  const maxChars = 1200;
+  const maxChunks = 200;
+
+  try {
+    const llm = createLLMClient();
+    const systemPrompt = `Si simulovaný biznis klient v obchodnom rozhovore.
+Tvoje správanie závisí od:
+- DISC typu (D/I/S/C)
+- úrovne náročnosti (beginner / advanced / expert)
+- aktuálnej fázy predaja
+
+Musíš:
+- odpovedať realisticky v slovenčine
+- držať odpoveď na 2–4 vety
+- vždy položiť 1 otázku, okrem fázy "closing" kde žiadaš ďalší krok/CTA
+- nikdy neprezrádzať, že si AI
+- nikdy neškoľ obchodníka`;
+
+    const developerPrompt = [
+      'Context:',
+      `- difficulty: ${normalizedDifficulty}`,
+      `- client_type: ${normalizedClientType}`,
+      `- client_disc_type: ${normalizedDiscType}`,
+      `- salesman_message_count: ${salesmanCount}`,
+      `- stage: ${stage}`,
+    ].join('\n');
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'developer', content: developerPrompt },
+      { role: 'user', content: latestMessage },
+    ];
+
+    let buffer = '';
+    let chunks = 0;
+    for await (const chunk of llm.streamChat({ messages })) {
+      chunks += 1;
+      if (chunk.type === 'token' && chunk.content) {
+        buffer += chunk.content;
+      }
+      if (chunk.type === 'final') {
+        buffer = chunk.content || buffer;
+        break;
+      }
+      if (chunks >= maxChunks) {
+        break;
+      }
+    }
+
+    let finalReply = typeof buffer === 'string' ? buffer.trim() : '';
+    if (finalReply.length > maxChars) {
+      finalReply = finalReply.slice(0, maxChars).trim();
+    }
+    return finalReply || fallbackMessage;
+  } catch (error) {
+    console.error('[sales-api] llm reply failed', error);
+    return fallbackMessage;
+  }
+}
+
+function normalizeDifficulty(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'intermediate') return 'advanced';
+  if (ALLOWED_DIFFICULTIES.has(normalized)) return normalized;
+  return 'beginner';
+}
+
+function normalizeClientType(value) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'repeat') return 'existing';
+  if (ALLOWED_CLIENT_TYPES.has(normalized)) return normalized;
+  return 'new';
+}
+
+function normalizeDisc(value) {
+  const normalized = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (ALLOWED_CLIENT_DISC_TYPES.has(normalized)) return normalized;
+  return 'D';
 }
