@@ -18,13 +18,20 @@ const storeVoiceSessionId = (value) => {
 
 const DIFFICULTY_LABELS = {
   beginner: 'Začiatočník',
-  intermediate: 'Pokročilý',
+  advanced: 'Pokročilý',
   expert: 'Expert',
 };
 
 const CLIENT_TYPE_LABELS = {
   new: 'Nový klient',
-  existing: 'Existujúci klient',
+  repeat: 'Opakovaný predaj',
+};
+
+const DISC_LABELS = {
+  D: 'Dominantný',
+  I: 'Iniciatívny',
+  S: 'Stabilný',
+  C: 'Svedomitý',
 };
 
 const DISC_COLORS = {
@@ -198,6 +205,8 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
   const discColor = DISC_COLORS[discValue] || 'bg-slate-400';
   const difficultyLabel = DIFFICULTY_LABELS[config?.difficulty] || config?.difficulty || '—';
   const clientTypeLabel = CLIENT_TYPE_LABELS[config?.clientType] || config?.clientType || '—';
+  const discLabel = DISC_LABELS[discValue];
+  const isRepeatClient = config?.clientType === 'repeat';
 
   return (
     <div className="w-full bg-slate-100">
@@ -229,10 +238,12 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                   {clientTypeLabel}
                 </span>
-                <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-semibold text-white ${discColor}`}>
-                  <span className="inline-block h-2 w-2 rounded-full bg-white/90" />
-                  {discValue || 'DISC'}
-                </span>
+                {isRepeatClient && (
+                  <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-xs font-semibold text-white ${discColor}`}>
+                    <span className="inline-block h-2 w-2 rounded-full bg-white/90" />
+                    {discValue ? `${discValue}${discLabel ? ` – ${discLabel}` : ''}` : 'DISC: —'}
+                  </span>
+                )}
                 {isInitializing && (
                   <span className="text-xs font-medium text-slate-500">Initializing…</span>
                 )}

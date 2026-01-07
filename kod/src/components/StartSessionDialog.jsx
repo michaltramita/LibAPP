@@ -96,7 +96,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
       status: 'started',
       started_at: new Date().toISOString(),
       topic: topic.trim(),
-      client_category: normalizedClientCategory,
+      client_type: normalizedClientCategory,
       client_disc_type: normalizedDisc,
       difficulty: normalizedDifficulty,
       industry: topic.trim(), // Mapping topic to industry

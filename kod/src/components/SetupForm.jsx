@@ -59,6 +59,9 @@ const SetupForm = ({ onStartMeeting }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!isFormValid) {
+      return;
+    }
     onStartMeeting({
       difficulty,
       clientType,
@@ -66,6 +69,12 @@ const SetupForm = ({ onStartMeeting }) => {
       industry
     });
   };
+
+  const isFormValid =
+    difficulty &&
+    clientType &&
+    industry &&
+    (clientType === 'new' || (clientType === 'repeat' && clientDiscType));
 
   return (
     <motion.div
@@ -194,6 +203,7 @@ const SetupForm = ({ onStartMeeting }) => {
         >
           <Button
             type="submit"
+            disabled={!isFormValid}
             className="w-full py-6 text-lg font-semibold bg-[#B81547] hover:bg-[#9e123d] transition-all shadow-lg text-white"
           >
             <Play className="w-5 h-5 mr-2" />
