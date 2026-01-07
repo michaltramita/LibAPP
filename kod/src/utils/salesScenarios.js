@@ -23,12 +23,19 @@ export const resolveScenarioForSession = (sessionData = {}) => {
   const scenarioFromTopic = resolveScenarioById(sessionData.topic);
   if (scenarioFromTopic) return scenarioFromTopic;
 
-  const legacyTopic = typeof sessionData.topic === 'string' ? sessionData.topic.trim() : '';
-  if (legacyTopic) {
+  const topicValue = typeof sessionData.topic === 'string' ? sessionData.topic.trim() : '';
+  if (topicValue) {
+    const scenarioByTitle = SALES_SCENARIOS.find(
+      (scenario) => scenario.title.toLowerCase() === topicValue.toLowerCase()
+    );
+    if (scenarioByTitle) return scenarioByTitle;
+  }
+
+  if (topicValue) {
     return {
       id: 'legacy_topic',
-      title: legacyTopic,
-      description: `Scenár zo staršej relácie: ${legacyTopic}.`,
+      title: topicValue,
+      description: `Scenár zo staršej relácie: ${topicValue}.`,
       constraints: [],
     };
   }
@@ -41,5 +48,12 @@ export const resolveScenarioIdForVoice = (sessionData = {}) => {
   if (scenarioFromId) return scenarioFromId.id;
   const scenarioFromTopic = resolveScenarioById(sessionData.topic);
   if (scenarioFromTopic) return scenarioFromTopic.id;
+  const topicValue = typeof sessionData.topic === 'string' ? sessionData.topic.trim() : '';
+  if (topicValue) {
+    const scenarioByTitle = SALES_SCENARIOS.find(
+      (scenario) => scenario.title.toLowerCase() === topicValue.toLowerCase()
+    );
+    if (scenarioByTitle) return scenarioByTitle.id;
+  }
   return DEFAULT_SCENARIO.id;
 };

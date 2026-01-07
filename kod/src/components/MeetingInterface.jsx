@@ -240,7 +240,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             difficulty,
             client_type: clientType,
             client_disc_type: clientDiscType,
-            scenario_id: config?.scenarioId,
+            scenario_key: config?.scenarioKey,
           }),
         }).finally(() => {
           window.clearTimeout(timeoutId);

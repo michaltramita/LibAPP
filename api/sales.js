@@ -11,19 +11,47 @@ const ALLOWED_CLIENT_DISC_TYPES = new Set(['D', 'I', 'S', 'C']);
 const ALLOWED_MODULES = new Set(['obchodny_rozhovor']);
 const SESSION_OWNER_COLUMN = 'user_id';
 let missingSupabaseEnvLogged = false;
-const SALES_SCENARIOS = require('../shared/salesScenarios.json');
-
 const STAGES = ['intro', 'discovery', 'presentation', 'closing'];
 const DISC_TYPES = ['D', 'I', 'S', 'C'];
 const CLIENT_TYPES = ['new', 'repeat'];
 
-const DEFAULT_SCENARIO =
-  (Array.isArray(SALES_SCENARIOS) && SALES_SCENARIOS[0]) || {
-    id: 'default',
-    title: 'Všeobecný obchodný scenár',
-    description: 'Všeobecný tréningový scenár bez špecifikácie.',
-    constraints: [],
-  };
+const SCENARIOS = {
+  crm_small_business_first_buy: {
+    title: 'CRM pre malé firmy — prvý nákup',
+    summary: 'Majiteľ malej firmy chce zjednodušiť evidenciu a vidieť rýchlu návratnosť.',
+    details:
+      'Stretnutie s majiteľom malej firmy, ktorý eviduje zákazníkov v tabuľkách. Zaujíma ho jednoduché zavedenie a rýchly prínos pre obchodný tím. Rozpočet je obmedzený a chce vidieť jasnú návratnosť. Má obavy z migrácie dát a času na zaškolenie.',
+    constraints: [
+      'Rozpočet je obmedzený.',
+      'Chce rýchle nasadenie do 4 týždňov.',
+      'Obáva sa migrácie dát a školenia.',
+    ],
+  },
+  crm_repeat_sale_expansion: {
+    title: 'CRM rozšírenie — opakovaný predaj',
+    summary: 'Spokojný klient chce rozšíriť licencie a nové moduly, ale očakáva merateľné prínosy.',
+    details:
+      'Klient používa CRM už rok a teraz rieši rozšírenie o marketingovú automatizáciu. Je spokojný s podporou, ale potrebuje preukázateľné zvýšenie konverzií. Do rozhodovania vstupuje finančný riaditeľ a tlačí na KPI. Očakáva jasný plán rolloutov bez výpadkov.',
+    constraints: [
+      'Kľúčové sú merateľné KPI a konverzie.',
+      'Rozhodovanie ovplyvňuje finančný riaditeľ.',
+      'Rozšírenie nesmie spôsobiť výpadky.',
+    ],
+  },
+  pricing_pushback_procurement: {
+    title: 'Nákupné oddelenie — tlak na cenu',
+    summary: 'Nákup je citlivý na cenu, vyžaduje porovnanie a tvrdé vyjednávanie.',
+    details:
+      'Na stretnutí je zástupca nákupu, ktorý tlačí na zľavy a porovnanie s konkurenciou. Potrebujú jasnú hodnotu, SLA a transparentné podmienky. V hre je viac dodávateľov, rozhodovanie môže trvať. Očakávajú prísne dodržanie procesu schvaľovania.',
+    constraints: [
+      'Zľavy musia byť odôvodnené hodnotou.',
+      'Vyžadujú SLA a transparentné podmienky.',
+      'Rozhodnutie ide cez formálne schvaľovanie.',
+    ],
+  },
+};
+
+const DEFAULT_SCENARIO_KEY = 'crm_small_business_first_buy';
 
 const BASE_BY_STAGE = {
   intro: {
@@ -423,9 +451,9 @@ async function handleSession(req, res) {
     typeof body.client_disc_type === 'string' && body.client_disc_type.trim()
       ? body.client_disc_type.trim()
       : null;
-  const scenarioId =
-    typeof body.scenario_id === 'string' && body.scenario_id.trim()
-      ? body.scenario_id.trim()
+  const scenarioKey =
+    typeof body.scenario_key === 'string' && body.scenario_key.trim()
+      ? body.scenario_key.trim()
       : null;
   const moduleValue =
     typeof body.module === 'string' && body.module.trim()
@@ -514,6 +542,18 @@ async function handleSession(req, res) {
       return;
     }
 
+    const scenario = resolveScenario(scenarioKey);
+    const scenarioMessage = buildScenarioSystemMessage(scenario);
+    const { error: scenarioMessageError } = await supabase
+      .from('sales_voice_messages')
+      .insert([{ session_id: sessionId, role: 'system', content: scenarioMessage }]);
+
+    if (scenarioMessageError) {
+      console.error('[sales-api] failed to insert scenario context', scenarioMessageError);
+      handleSupabaseFailure(res, scenarioMessageError, 'Unable to store scenario context');
+      return;
+    }
+
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[sales-api] session created user=${userId.slice(0, 8)} session=${sessionId}`);
     }
@@ -537,48 +577,29 @@ function resolveSessionId(sessionData, requestedSessionId) {
   return requestedSessionId || null;
 }
 
-function isMissingColumnError(error, columnName) {
-  if (!error) return false;
-  if (error.code === '42703') return true;
-  const message = `${error.message || ''}`.toLowerCase();
-  return message.includes('column') && message.includes(columnName.toLowerCase());
+function resolveScenario(key) {
+  const normalized = typeof key === 'string' ? key.trim() : '';
+  if (normalized && SCENARIOS[normalized]) {
+    return SCENARIOS[normalized];
+  }
+  return SCENARIOS[DEFAULT_SCENARIO_KEY];
 }
 
-function resolveScenarioById(scenarioId) {
-  const normalized = typeof scenarioId === 'string' ? scenarioId.trim() : '';
-  if (!normalized) return null;
-  return SALES_SCENARIOS.find((scenario) => scenario.id === normalized) || null;
-}
-
-function deriveScenarioConstraints(scenario) {
-  if (!scenario || typeof scenario !== 'object') return [];
-  const explicit = Array.isArray(scenario.constraints)
-    ? scenario.constraints.map((constraint) => `${constraint}`.trim()).filter(Boolean)
+function buildScenarioSystemMessage(scenario) {
+  const resolvedScenario = scenario || SCENARIOS[DEFAULT_SCENARIO_KEY];
+  const constraints = Array.isArray(resolvedScenario.constraints)
+    ? resolvedScenario.constraints.map((constraint) => `${constraint}`.trim()).filter(Boolean)
     : [];
-  if (explicit.length) return explicit;
+  const constraintLines = constraints.length ? constraints : ['-'];
+  const content = `[SCENARIO_CONTEXT]
+title: ${resolvedScenario.title}
+summary: ${resolvedScenario.summary}
+details: ${resolvedScenario.details}
+constraints:
+${constraintLines.map((line) => `- ${line}`).join('\n')}
+[/SCENARIO_CONTEXT]`;
 
-  const description = typeof scenario.description === 'string' ? scenario.description.trim() : '';
-  if (!description) return [];
-
-  const sentences = description
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean);
-
-  return sentences
-    .slice(0, 3)
-    .map((sentence) => sentence.replace(/[.!?]+$/, '').trim())
-    .filter(Boolean);
-}
-
-function buildScenarioContext(scenarioId) {
-  const scenario = resolveScenarioById(scenarioId) || DEFAULT_SCENARIO;
-  return {
-    id: scenario.id,
-    title: scenario.title,
-    description: scenario.description,
-    constraints: deriveScenarioConstraints(scenario),
-  };
+  return content.length > 1200 ? `${content.slice(0, 1190)}…` : content;
 }
 
 async function handleMessage(req, res) {
@@ -700,7 +721,22 @@ async function handleMessage(req, res) {
       );
     }
 
-    const scenarioContext = buildScenarioContext(session.scenario_id);
+    const { data: scenarioMessages, error: scenarioMessageError } = await supabase
+      .from('sales_voice_messages')
+      .select('content')
+      .eq('session_id', sessionIdValue)
+      .eq('role', 'system')
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    if (scenarioMessageError) {
+      console.error('[sales-api] failed to fetch scenario context', scenarioMessageError);
+      handleSupabaseFailure(res, scenarioMessageError, 'Unable to load scenario context');
+      return;
+    }
+
+    const scenarioContext =
+      scenarioMessages?.[0]?.content || buildScenarioSystemMessage(resolveScenario());
 
     const clientReplyText = await generateClientReply({
       latestMessage: contentValue,
@@ -802,7 +838,10 @@ async function generateClientReply({
   salesmanCount,
   scenarioContext,
 }) {
-  const resolvedScenarioContext = scenarioContext || buildScenarioContext();
+  const resolvedScenarioContext =
+    typeof scenarioContext === 'string' && scenarioContext.trim()
+      ? scenarioContext.trim()
+      : buildScenarioSystemMessage(resolveScenario());
   const inputType = classifySalesmanInput(latestMessage);
   const replyMode = resolveReplyMode({
     inputType,
@@ -843,7 +882,12 @@ async function generateClientReply({
     });
   }
 
-  const rendered = await renderPlanWithLLM(plan, latestMessage, maxQuestions, replyMode);
+  const rendered = await renderPlanWithLLM(
+    plan,
+    latestMessage,
+    maxQuestions,
+    resolvedScenarioContext
+  );
   if (rendered) {
     return enforceMaxLength(rendered, 400);
   }
@@ -1206,7 +1250,7 @@ function resolveNextStepType(triggers) {
   return 'agree';
 }
 
-async function renderPlanWithLLM(plan, latestMessage, maxQuestions) {
+async function renderPlanWithLLM(plan, latestMessage, maxQuestions, scenarioContext) {
   try {
     const llm = createLLMClient();
     const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepridávaj nové body.`;
@@ -1230,7 +1274,7 @@ Max počet otázok: ${maxQuestions}
 Pravidlá:
 - Odpoveď musí byť po slovensky.
 - Drž sa otázok, reakcie, constraints a nextStepType.
-- Obsah odpovede musí byť vecne viazaný na Scenario context.
+- Reaguj v súlade so scenárom zo systémovej správy [SCENARIO_CONTEXT].
 - Žiadne školenie obchodníka ani meta poznámky.
 - Odpoveď má mať max 60 slov.
 - Použi presne tento formát, každý riadok na nový riadok:
@@ -1243,6 +1287,7 @@ OTÁZKA: <0-${maxQuestions} otázky; ak 0, napíš "-">
 - Nikdy neprekroč maxQuestions.`;
 
     const messages = [
+      { role: 'system', content: scenarioContext },
       { role: 'system', content: systemPrompt },
       { role: 'developer', content: developerPrompt },
       { role: 'user', content: latestMessage },

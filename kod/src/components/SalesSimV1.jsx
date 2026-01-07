@@ -147,7 +147,7 @@ const SalesSimV1 = ({ config, sessionId, accessToken, onEndMeeting }) => {
           difficulty: config?.difficulty,
           client_type: config?.clientType,
           client_disc_type: config?.clientDiscType,
-          scenario_id: config?.scenarioId,
+          scenario_key: config?.scenarioKey,
         }),
       });
 

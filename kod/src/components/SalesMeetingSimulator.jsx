@@ -156,7 +156,7 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
   }
 
   const resolvedScenario = resolveScenarioForSession(sessionData);
-  const scenarioIdForVoice = resolveScenarioIdForVoice(sessionData);
+  const scenarioKeyForVoice = resolveScenarioIdForVoice(sessionData);
 
   const sessionConfig = {
     topic: resolvedScenario.title,
@@ -165,7 +165,7 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
     clientType: sessionData.client_type || 'new',
     difficulty: sessionData.difficulty,
     salesmanLevel: user?.user_metadata?.experience_level || 'beginner',
-    scenarioId: scenarioIdForVoice,
+    scenarioKey: scenarioKeyForVoice,
     scenarioTitle: resolvedScenario.title,
     scenarioDescription: resolvedScenario.description,
   };

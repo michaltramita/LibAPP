@@ -32,7 +32,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const [experienceLevel, setExperienceLevel] = useState(null);
   const [clientCategory, setClientCategory] = useState(null);
   const [clientType, setClientType] = useState(null);
-  const [scenarioId, setScenarioId] = useState('');
+  const [scenarioKey, setScenarioKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const normalizeDifficulty = (raw) => {
@@ -63,7 +63,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
       );
       setClientCategory(null);
       setClientType(null);
-      setScenarioId('');
+      setScenarioKey('');
       setIsLoading(false);
     }
   }, [open, user]);
@@ -78,12 +78,12 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
     const normalizedClientCategory = normalizeClientType(clientCategory);
     const normalizedDifficulty = normalizeDifficulty(experienceLevel);
     const normalizedDisc = normalizeDisc(clientType, normalizedClientCategory);
-    const selectedScenario = resolveScenarioById(scenarioId) || null;
+    const selectedScenario = resolveScenarioById(scenarioKey) || null;
 
     if (
       !experienceLevel ||
       !clientCategory ||
-      !scenarioId ||
+      !scenarioKey ||
       (normalizedClientCategory === 'repeat' && !normalizedDisc)
     ) {
       toast({
@@ -112,8 +112,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
       module_code: moduleCode,
       status: 'started',
       started_at: new Date().toISOString(),
-      topic: selectedScenario.title,
-      scenario_id: selectedScenario.id,
+      topic: selectedScenario.id,
       client_type: normalizedClientCategory,
       client_disc_type: normalizedDisc,
       difficulty: normalizedDifficulty,
@@ -161,7 +160,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const isFormValid =
     experienceLevel &&
     clientCategory &&
-    scenarioId &&
+    scenarioKey &&
     (clientCategory === 'new' || (clientCategory === 'repeat' && clientType));
 
   const experienceLevels = [
@@ -295,7 +294,7 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
                 <Briefcase className="w-5 h-5 text-white opacity-80" />
                 Tréningová situácia
               </h3>
-              <Select value={scenarioId} onValueChange={setScenarioId}>
+              <Select value={scenarioKey} onValueChange={setScenarioKey}>
                 <SelectTrigger className="rounded-2xl border-white/50 bg-white/10 text-white focus:ring-white">
                   <SelectValue placeholder="Vyberte scenár" />
                 </SelectTrigger>

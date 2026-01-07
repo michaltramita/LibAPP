@@ -1,7 +1,8 @@
 [
   {
-    "id": "crm_smb_new",
-    "title": "CRM pre malé firmy – prvý nákup",
+    "id": "crm_small_business_first_buy",
+    "title": "CRM pre malé firmy — prvý nákup",
+    "summary": "Majiteľ malej firmy chce zjednodušiť evidenciu a vidieť rýchlu návratnosť.",
     "description": "Stretnutie s majiteľom malej firmy, ktorý eviduje zákazníkov v tabuľkách. Zaujíma ho jednoduché zavedenie a rýchly prínos pre obchodný tím. Rozpočet je obmedzený a chce vidieť jasnú návratnosť. Má obavy z migrácie dát a času na zaškolenie.",
     "constraints": [
       "Rozpočet je obmedzený.",
@@ -10,23 +11,25 @@
     ]
   },
   {
-    "id": "manufacturing_b2b_repeat",
-    "title": "Výrobná firma – rozšírenie existujúceho riešenia",
-    "description": "Rok používajú váš systém pre plánovanie výroby, teraz riešia modul pre údržbu. Klient je spokojný, ale potrebuje preukázateľné zlepšenie OEE a menej odstávok. Do hry vstupuje finančný riaditeľ a tlačí na merateľné KPI. Očakáva jasný plán implementácie bez prerušenia výroby.",
+    "id": "crm_repeat_sale_expansion",
+    "title": "CRM rozšírenie — opakovaný predaj",
+    "summary": "Spokojný klient chce rozšíriť licencie a moduly, ale očakáva merateľné prínosy.",
+    "description": "Klient používa CRM už rok a teraz rieši rozšírenie o marketingovú automatizáciu. Je spokojný s podporou, ale potrebuje preukázateľné zvýšenie konverzií. Do rozhodovania vstupuje finančný riaditeľ a tlačí na KPI. Očakáva jasný plán rolloutov bez výpadkov.",
     "constraints": [
-      "Merateľné KPI (OEE, odstávky) sú kľúčové.",
-      "Implementácia nesmie prerušiť výrobu.",
-      "Rozhodovanie ovplyvňuje finančný riaditeľ."
+      "Kľúčové sú merateľné KPI a konverzie.",
+      "Rozhodovanie ovplyvňuje finančný riaditeľ.",
+      "Rozšírenie nesmie spôsobiť výpadky."
     ]
   },
   {
-    "id": "services_hr_new",
-    "title": "HR služby – náborový outsourcing pre poradenskú firmu",
-    "description": "Poradenská firma rýchlo rastie a nestíha obsadzovať seniorné pozície. Hľadajú partnera na nábor a onboarding, ktorý udrží kvalitu kandidátov. Citlivé sú otázky employer brandingu a dôvernosti informácií. Očakávajú flexibilný model spolupráce a transparentné reporty.",
+    "id": "pricing_pushback_procurement",
+    "title": "Nákupné oddelenie — tlak na cenu",
+    "summary": "Nákup tlačí na zľavy, SLA a formálne schvaľovanie.",
+    "description": "Na stretnutí je zástupca nákupu, ktorý tlačí na zľavy a porovnanie s konkurenciou. Potrebujú jasnú hodnotu, SLA a transparentné podmienky. V hre je viac dodávateľov, rozhodovanie môže trvať. Očakávajú prísne dodržanie procesu schvaľovania.",
     "constraints": [
-      "Kvalita kandidátov je dôležitejšia než rýchlosť.",
-      "Dôvernosť a employer branding sú citlivé.",
-      "Chcú flexibilný model a pravidelné reporty."
+      "Zľavy musia byť odôvodnené hodnotou.",
+      "Vyžadujú SLA a transparentné podmienky.",
+      "Rozhodnutie ide cez formálne schvaľovanie."
     ]
   }
 ]
