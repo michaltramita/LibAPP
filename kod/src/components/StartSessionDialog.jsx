@@ -34,6 +34,14 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const [clientType, setClientType] = useState(null);
   const [scenarioKey, setScenarioKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const selectedScenario = resolveScenarioById(scenarioKey);
+
+  const getScenarioDescriptionPreview = (description, maxLength = 150) => {
+    if (!description) return '';
+    const normalized = description.trim();
+    if (normalized.length <= maxLength) return normalized;
+    return `${normalized.slice(0, maxLength).trim()}…`;
+  };
 
   const normalizeDifficulty = (raw) => {
     const normalized = raw?.toString().trim().toLowerCase();
@@ -295,15 +303,34 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
                 Tréningová situácia
               </h3>
               <Select value={scenarioKey} onValueChange={setScenarioKey}>
-                <SelectTrigger className="rounded-2xl border-white/50 bg-white/10 text-white focus:ring-white">
-                  <SelectValue placeholder="Vyberte scenár" />
+                <SelectTrigger className="h-auto items-start rounded-2xl border-white/50 bg-white/10 px-4 py-3 text-left text-white focus:ring-white">
+                  {selectedScenario ? (
+                    <div className="flex flex-col gap-1 overflow-hidden">
+                      <span className="text-sm font-semibold text-white truncate">
+                        {selectedScenario.title}
+                      </span>
+                      <span className="text-xs text-white/80 leading-4">
+                        {getScenarioDescriptionPreview(selectedScenario.description)}
+                      </span>
+                    </div>
+                  ) : (
+                    <SelectValue placeholder="Vyberte scenár" className="text-white/70" />
+                  )}
                 </SelectTrigger>
-                <SelectContent className="max-h-72">
+                <SelectContent className="max-h-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
                   {SALES_SCENARIOS.map((scenario) => (
-                    <SelectItem key={scenario.id} value={scenario.id}>
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{scenario.title}</span>
-                        <span className="text-xs text-slate-500">{scenario.description}</span>
+                    <SelectItem
+                      key={scenario.id}
+                      value={scenario.id}
+                      className="cursor-pointer rounded-xl border border-transparent px-4 py-3 pl-9 text-left focus:bg-slate-50 hover:bg-slate-50 data-[state=checked]:border-[#B81547] data-[state=checked]:bg-[#B81547]/10"
+                    >
+                      <div className="flex flex-col gap-1 overflow-hidden">
+                        <span className="text-sm font-semibold text-slate-900 truncate">
+                          {scenario.title}
+                        </span>
+                        <span className="text-xs text-slate-500 leading-5 max-h-10 overflow-hidden">
+                          {getScenarioDescriptionPreview(scenario.description, 160)}
+                        </span>
                       </div>
                     </SelectItem>
                   ))}
