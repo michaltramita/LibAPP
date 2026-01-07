@@ -2,13 +2,6 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Users, Target, Briefcase, Play } from 'lucide-react';
 import { resolveScenarioById, SALES_SCENARIOS } from '@/utils/salesScenarios';
 
@@ -18,13 +11,6 @@ const SetupForm = ({ onStartMeeting }) => {
   const [clientDiscType, setClientDiscType] = useState(null);
   const [scenarioKey, setScenarioKey] = useState('');
   const selectedScenario = resolveScenarioById(scenarioKey);
-
-  const getScenarioDescriptionPreview = (description, maxLength = 150) => {
-    if (!description) return '';
-    const normalized = description.trim();
-    if (normalized.length <= maxLength) return normalized;
-    return `${normalized.slice(0, maxLength).trim()}…`;
-  };
 
   const salesmanLevels = [
     { value: 'beginner', label: 'Začiatočník', description: 'Nový v predaji, učí sa základy' },
@@ -183,44 +169,38 @@ const SetupForm = ({ onStartMeeting }) => {
           )}
 
           <div className="space-y-4">
-            <Label className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            <Label
+              htmlFor="scenario-select"
+              className="text-lg font-semibold text-slate-900 flex items-center gap-2"
+            >
               <Briefcase className="w-5 h-5" />
               Tréningová situácia
             </Label>
-            <Select value={scenarioKey} onValueChange={setScenarioKey}>
-              <SelectTrigger className="h-auto items-start rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-left">
-                {selectedScenario ? (
-                  <div className="flex flex-col gap-1 overflow-hidden">
-                    <span className="text-sm font-semibold text-slate-900 truncate">
-                      {selectedScenario.title}
-                    </span>
-                    <span className="text-xs text-slate-500 leading-4">
-                      {getScenarioDescriptionPreview(selectedScenario.description)}
-                    </span>
-                  </div>
-                ) : (
-                  <SelectValue placeholder="Vyberte scenár" />
-                )}
-              </SelectTrigger>
-              <SelectContent className="max-h-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-                {SALES_SCENARIOS.map((scenario) => (
-                  <SelectItem
-                    key={scenario.id}
-                    value={scenario.id}
-                    className="cursor-pointer rounded-xl border border-transparent px-4 py-3 pl-9 text-left focus:bg-slate-50 hover:bg-slate-50 data-[state=checked]:border-[#B81547] data-[state=checked]:bg-red-50"
-                  >
-                    <div className="flex flex-col gap-1 overflow-hidden">
-                      <span className="text-sm font-semibold text-slate-900 truncate">
-                        {scenario.title}
-                      </span>
-                      <span className="text-xs text-slate-500 leading-5 max-h-10 overflow-hidden">
-                        {getScenarioDescriptionPreview(scenario.description, 160)}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select
+              id="scenario-select"
+              value={scenarioKey}
+              onChange={(event) => setScenarioKey(event.target.value)}
+              className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-left text-slate-900 focus:border-[#B81547] focus:outline-none"
+            >
+              <option value="" disabled>
+                Vyberte scenár
+              </option>
+              {SALES_SCENARIOS.map((scenario) => (
+                <option key={scenario.id} value={scenario.id}>
+                  {scenario.title}
+                </option>
+              ))}
+            </select>
+            {selectedScenario && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">
+                  {selectedScenario.title}
+                </p>
+                <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap">
+                  {selectedScenario.description}
+                </p>
+              </div>
+            )}
             <p className="text-sm text-slate-500">
               Vyberte si scenár, na ktorom chcete trénovať.
             </p>
