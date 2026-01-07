@@ -147,6 +147,7 @@ const SalesSimV1 = ({ config, sessionId, accessToken, onEndMeeting }) => {
           difficulty: config?.difficulty,
           client_type: config?.clientType,
           client_disc_type: config?.clientDiscType,
+          scenario_key: config?.scenarioKey,
         }),
       });
 
@@ -269,7 +270,7 @@ const SalesSimV1 = ({ config, sessionId, accessToken, onEndMeeting }) => {
             <div>
               <h1 className="text-lg font-semibold text-slate-900">Obchodná simulácia</h1>
               <p className="text-sm text-slate-500">
-                {config?.topic || 'Téma nie je zadaná'}
+                {config?.scenarioTitle || config?.topic || 'Téma nie je zadaná'}
               </p>
             </div>
             <button

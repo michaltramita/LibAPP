@@ -1,0 +1,35 @@
+[
+  {
+    "id": "crm_small_business_first_buy",
+    "title": "CRM pre malé firmy — prvý nákup",
+    "summary": "Majiteľ malej firmy chce zjednodušiť evidenciu a vidieť rýchlu návratnosť.",
+    "description": "Stretnutie s majiteľom malej firmy, ktorý eviduje zákazníkov v tabuľkách. Zaujíma ho jednoduché zavedenie a rýchly prínos pre obchodný tím. Rozpočet je obmedzený a chce vidieť jasnú návratnosť. Má obavy z migrácie dát a času na zaškolenie.",
+    "constraints": [
+      "Rozpočet je obmedzený.",
+      "Chce rýchle nasadenie do 4 týždňov.",
+      "Obáva sa migrácie dát a školenia."
+    ]
+  },
+  {
+    "id": "crm_repeat_sale_expansion",
+    "title": "CRM rozšírenie — opakovaný predaj",
+    "summary": "Spokojný klient chce rozšíriť licencie a moduly, ale očakáva merateľné prínosy.",
+    "description": "Klient používa CRM už rok a teraz rieši rozšírenie o marketingovú automatizáciu. Je spokojný s podporou, ale potrebuje preukázateľné zvýšenie konverzií. Do rozhodovania vstupuje finančný riaditeľ a tlačí na KPI. Očakáva jasný plán rolloutov bez výpadkov.",
+    "constraints": [
+      "Kľúčové sú merateľné KPI a konverzie.",
+      "Rozhodovanie ovplyvňuje finančný riaditeľ.",
+      "Rozšírenie nesmie spôsobiť výpadky."
+    ]
+  },
+  {
+    "id": "pricing_pushback_procurement",
+    "title": "Nákupné oddelenie — tlak na cenu",
+    "summary": "Nákup tlačí na zľavy, SLA a formálne schvaľovanie.",
+    "description": "Na stretnutí je zástupca nákupu, ktorý tlačí na zľavy a porovnanie s konkurenciou. Potrebujú jasnú hodnotu, SLA a transparentné podmienky. V hre je viac dodávateľov, rozhodovanie môže trvať. Očakávajú prísne dodržanie procesu schvaľovania.",
+    "constraints": [
+      "Zľavy musia byť odôvodnené hodnotou.",
+      "Vyžadujú SLA a transparentné podmienky.",
+      "Rozhodnutie ide cez formálne schvaľovanie."
+    ]
+  }
+]

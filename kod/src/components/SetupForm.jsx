@@ -2,13 +2,21 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Users, Target, Briefcase, Play } from 'lucide-react';
+import { resolveScenarioById, SALES_SCENARIOS } from '@/utils/salesScenarios';
 
 const SetupForm = ({ onStartMeeting }) => {
   const [difficulty, setDifficulty] = useState('beginner');
   const [clientType, setClientType] = useState('new');
   const [clientDiscType, setClientDiscType] = useState(null);
-  const [industry, setIndustry] = useState('technology');
+  const [scenarioKey, setScenarioKey] = useState('');
 
   const salesmanLevels = [
     { value: 'beginner', label: 'Začiatočník', description: 'Nový v predaji, učí sa základy' },
@@ -48,32 +56,26 @@ const SetupForm = ({ onStartMeeting }) => {
     }
   ];
 
-  const industries = [
-    { value: 'technology', label: 'Technológie a Softvér' },
-    { value: 'healthcare', label: 'Zdravotníctvo a Medicína' },
-    { value: 'finance', label: 'Financie a Bankovníctvo' },
-    { value: 'manufacturing', label: 'Výroba a Priemysel' },
-    { value: 'retail', label: 'Maloobchod a E-commerce' },
-    { value: 'consulting', label: 'Poradenstvo a Služby' }
-  ];
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!isFormValid) {
       return;
     }
+    const scenario = resolveScenarioById(scenarioKey);
+    if (!scenario) return;
     onStartMeeting({
       difficulty,
       clientType,
       clientDiscType: clientType === 'repeat' ? clientDiscType : null,
-      industry
+      scenarioKey: scenario.id,
+      scenarioTitle: scenario.title,
     });
   };
 
   const isFormValid =
     difficulty &&
     clientType &&
-    industry &&
+    scenarioKey &&
     (clientType === 'new' || (clientType === 'repeat' && clientDiscType));
 
   return (
@@ -175,25 +177,26 @@ const SetupForm = ({ onStartMeeting }) => {
           <div className="space-y-4">
             <Label className="text-lg font-semibold text-slate-900 flex items-center gap-2">
               <Briefcase className="w-5 h-5" />
-              Odvetvie / Téma
+              Tréningová situácia
             </Label>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {industries.map((ind) => (
-                <motion.div
-                  key={ind.value}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setIndustry(ind.value)}
-                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all text-center ${
-                    industry === ind.value
-                      ? 'border-[#B81547] bg-red-50 shadow-md'
-                      : 'border-slate-200 bg-white hover:border-red-200'
-                  }`}
-                >
-                  <span className="text-sm font-medium text-slate-900">{ind.label}</span>
-                </motion.div>
-              ))}
-            </div>
+            <Select value={scenarioKey} onValueChange={setScenarioKey}>
+              <SelectTrigger className="rounded-lg border-2 border-slate-200 bg-white">
+                <SelectValue placeholder="Vyberte scenár" />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                {SALES_SCENARIOS.map((scenario) => (
+                  <SelectItem key={scenario.id} value={scenario.id}>
+                    <div className="flex flex-col">
+                      <span className="font-semibold">{scenario.title}</span>
+                      <span className="text-xs text-slate-500">{scenario.description}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-slate-500">
+              Vyberte si scenár, na ktorom chcete trénovať.
+            </p>
           </div>
         </div>
 

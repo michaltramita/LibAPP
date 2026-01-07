@@ -240,6 +240,7 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             difficulty,
             client_type: clientType,
             client_disc_type: clientDiscType,
+            scenario_key: config?.scenarioKey,
           }),
         }).finally(() => {
           window.clearTimeout(timeoutId);
@@ -483,8 +484,10 @@ const MeetingInterface = ({ config, onEndMeeting, sessionId, accessToken }) => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h1 className="text-lg font-semibold text-slate-800">Obchodná simulácia</h1>
-                {config.topic && (
-                  <p className="text-xs text-slate-500">{config.topic}</p>
+                {(config.scenarioTitle || config.topic) && (
+                  <p className="text-xs text-slate-500">
+                    {config.scenarioTitle || config.topic}
+                  </p>
                 )}
               </div>
               <Button

@@ -4,6 +4,10 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Loader2 } from 'lucide-react';
 import { buildFinalFeedback } from '@/utils/salesSimulator'; // Import the main feedback builder
+import {
+  resolveScenarioForSession,
+  resolveScenarioIdForVoice,
+} from '@/utils/salesScenarios';
 
 const SALES_SESSION_STORAGE_KEY = 'sales_session_id';
 
@@ -151,13 +155,19 @@ const SalesMeetingSimulator = ({ sessionId, onSessionComplete }) => {
     );
   }
 
+  const resolvedScenario = resolveScenarioForSession(sessionData);
+  const scenarioKeyForVoice = resolveScenarioIdForVoice(sessionData);
+
   const sessionConfig = {
-    topic: sessionData.topic,
-    industry: sessionData.industry,
+    topic: resolvedScenario.title,
+    industry: resolvedScenario.title,
     clientDiscType: sessionData.client_disc_type, // Correctly mapped from DB
     clientType: sessionData.client_type || 'new',
     difficulty: sessionData.difficulty,
-    salesmanLevel: user?.user_metadata?.experience_level || 'beginner'
+    salesmanLevel: user?.user_metadata?.experience_level || 'beginner',
+    scenarioKey: scenarioKeyForVoice,
+    scenarioTitle: resolvedScenario.title,
+    scenarioDescription: resolvedScenario.description,
   };
 
   return (
