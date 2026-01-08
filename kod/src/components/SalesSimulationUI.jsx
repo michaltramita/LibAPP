@@ -173,6 +173,7 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
 
     const nextContent = inputValue.trim();
     const timestamp = new Date().toISOString();
+    const typingId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     setInputValue('');
     setIsSending(true);
     setErrorMessage(null);
@@ -180,6 +181,13 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
     setMessages((prev) => [
       ...prev,
       { type: 'salesman', text: nextContent, timestamp },
+      {
+        type: 'client',
+        text: 'AI píše…',
+        timestamp: new Date().toISOString(),
+        isTyping: true,
+        typingId,
+      },
     ]);
 
     try {
@@ -202,14 +210,23 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
       }
 
       const reply = data?.client_message || data?.reply || data?.message;
-      if (reply) {
-        setMessages((prev) => [
-          ...prev,
+      setMessages((prev) => {
+        const withoutTyping = prev.filter(
+          (message) => !(message.isTyping && message.typingId === typingId)
+        );
+        if (!reply) {
+          return withoutTyping;
+        }
+        return [
+          ...withoutTyping,
           { type: 'client', text: reply, timestamp: new Date().toISOString() },
-        ]);
-      }
+        ];
+      });
     } catch (error) {
       console.error(error);
+      setMessages((prev) =>
+        prev.filter((message) => !(message.isTyping && message.typingId === typingId))
+      );
       setErrorMessage(error?.message || 'Nepodarilo sa odoslať správu.');
     } finally {
       setIsSending(false);
@@ -330,7 +347,18 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
                         isSalesman ? 'bg-[#B81547] text-white' : 'bg-slate-100 text-slate-800'
                       }`}
                     >
-                      {message.text}
+                      {message.isTyping ? (
+                        <span className="italic text-slate-500">
+                          AI píše
+                          <span className="inline-flex gap-0.5 pl-1 text-slate-400">
+                            <span className="animate-pulse">.</span>
+                            <span className="animate-pulse [animation-delay:150ms]">.</span>
+                            <span className="animate-pulse [animation-delay:300ms]">.</span>
+                          </span>
+                        </span>
+                      ) : (
+                        message.text
+                      )}
                     </div>
                   </div>
                 );
