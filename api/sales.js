@@ -6,6 +6,7 @@ const { rateLimit } = require('./lib/rateLimit');
 const MAX_CONTENT_LENGTH = 1000;
 const MAX_ID_LENGTH = 128;
 const MAX_SCENARIO_KEY_LENGTH = 128;
+const HISTORY_LIMIT = 12;
 const SCENARIO_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const ALLOWED_DIFFICULTIES = new Set(['beginner', 'advanced', 'expert']);
 const ALLOWED_CLIENT_TYPES = new Set(['new', 'repeat']);
@@ -16,6 +17,7 @@ let missingSupabaseEnvLogged = false;
 const STAGES = ['intro', 'discovery', 'presentation', 'closing'];
 const DISC_TYPES = ['D', 'I', 'S', 'C'];
 const CLIENT_TYPES = ['new', 'repeat'];
+const HISTORY_MESSAGE_LIMIT = 600;
 
 const SCENARIOS = {
   crm_small_business_first_buy: {
@@ -994,6 +996,22 @@ async function handleMessage(req, res) {
       return;
     }
 
+    let llmHistory = [];
+    const { data: historyRows, error: historyError } = await supabase
+      .from('sales_voice_messages')
+      .select('id,role,content,created_at')
+      .eq('session_id', sessionIdValue)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(HISTORY_LIMIT);
+
+    if (historyError) {
+      console.error('[sales-api] failed to fetch history', historyError);
+    } else {
+      const chronologicalHistory = Array.isArray(historyRows) ? historyRows.slice().reverse() : [];
+      llmHistory = buildLLMHistory(chronologicalHistory);
+    }
+
     const { error: salesmanCountError, count: salesmanCount } = await supabase
       .from('sales_voice_messages')
       .select('id', { count: 'exact', head: true })
@@ -1034,6 +1052,7 @@ async function handleMessage(req, res) {
       salesmanCount,
       scenarioContext,
       scenarioKey,
+      history: llmHistory,
     });
 
     const { error: clientMessageError } = await supabase
@@ -1117,6 +1136,31 @@ function resolveStage(salesmanCount) {
   return 'closing';
 }
 
+function truncateForPrompt(text, limit = HISTORY_MESSAGE_LIMIT) {
+  const value = typeof text === 'string' ? text.trim() : '';
+  if (!value) return '';
+  if (value.length <= limit) return value;
+  return value.slice(0, limit).trim();
+}
+
+function buildLLMHistory(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages
+    .map((message) => {
+      if (!message || typeof message !== 'object') return null;
+      const roleValue = typeof message.role === 'string' ? message.role.trim() : '';
+      let mappedRole = null;
+      if (roleValue === 'salesman') mappedRole = 'user';
+      if (roleValue === 'client') mappedRole = 'assistant';
+      if (roleValue === 'system') mappedRole = 'system';
+      if (!mappedRole) return null;
+      const content = truncateForPrompt(message.content);
+      if (!content) return null;
+      return { role: mappedRole, content };
+    })
+    .filter(Boolean);
+}
+
 async function generateClientReply({
   latestMessage,
   stage,
@@ -1126,6 +1170,7 @@ async function generateClientReply({
   salesmanCount,
   scenarioContext,
   scenarioKey,
+  history,
 }) {
   const resolvedScenarioContext =
     typeof scenarioContext === 'string' && scenarioContext.trim()
@@ -1180,7 +1225,8 @@ async function generateClientReply({
     latestMessage,
     maxQuestions,
     resolvedScenarioContext,
-    resolvedScenarioKey
+    resolvedScenarioKey,
+    history
   );
   if (rendered) {
     return enforceMaxLength(rendered, 400);
@@ -1549,15 +1595,17 @@ async function renderPlanWithLLM(
   latestMessage,
   maxQuestions,
   scenarioContext,
-  scenarioKey
+  scenarioKey,
+  history
 ) {
   try {
     const llm = createLLMClient();
+    const scenarioSystemMessage = typeof scenarioContext === 'string' ? scenarioContext : '';
     const systemPrompt = `Si biznis klient v obchodnom rozhovore. Tvojou úlohou je len zrenderovať ReplyPlan do prirodzenej, stručnej slovenčiny. Nepridávaj nové body.`;
-    const scenarioContext = plan?.scenarioContext;
-    const scenarioTitle = scenarioContext?.title || DEFAULT_SCENARIO.title;
-    const scenarioConstraints = Array.isArray(scenarioContext?.constraints)
-      ? scenarioContext.constraints.filter(Boolean)
+    const scenarioContextData = plan?.scenarioContext;
+    const scenarioTitle = scenarioContextData?.title || DEFAULT_SCENARIO.title;
+    const scenarioConstraints = Array.isArray(scenarioContextData?.constraints)
+      ? scenarioContextData.constraints.filter(Boolean)
       : [];
     const scenarioConstraintLines = scenarioConstraints.length
       ? scenarioConstraints.map((constraint) => `- ${constraint}`)
@@ -1592,11 +1640,20 @@ OTÁZKA: <0-${maxQuestions} otázky; ak 0, napíš "-">
 - Ak sú 2 otázky, oddeľ ich " | ".
 - Nikdy neprekroč maxQuestions.`;
 
+    const resolvedHistory = Array.isArray(history) ? history : [];
+    const trimmedLatestMessage = typeof latestMessage === 'string' ? latestMessage.trim() : '';
+    const lastHistoryEntry = resolvedHistory[resolvedHistory.length - 1];
+    const shouldAppendLatestMessage =
+      trimmedLatestMessage &&
+      (!lastHistoryEntry ||
+        lastHistoryEntry.role !== 'user' ||
+        lastHistoryEntry.content !== trimmedLatestMessage);
     const messages = [
-      { role: 'system', content: scenarioContext },
+      { role: 'system', content: scenarioSystemMessage },
       { role: 'system', content: systemPrompt },
       { role: 'developer', content: developerPrompt },
-      { role: 'user', content: latestMessage },
+      ...resolvedHistory,
+      ...(shouldAppendLatestMessage ? [{ role: 'user', content: trimmedLatestMessage }] : []),
     ];
 
     let buffer = '';
