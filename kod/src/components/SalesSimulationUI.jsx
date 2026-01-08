@@ -1,19 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 const SALES_VOICE_SESSION_STORAGE_KEY = 'sales_voice_session_id';
+const voiceKey = (appSessionId) =>
+  appSessionId ? `${SALES_VOICE_SESSION_STORAGE_KEY}:${appSessionId}` : SALES_VOICE_SESSION_STORAGE_KEY;
 
-const readStoredVoiceSessionId = () => {
+const readStoredVoiceSessionId = (appSessionId) => {
   if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(SALES_VOICE_SESSION_STORAGE_KEY);
+  return window.localStorage.getItem(voiceKey(appSessionId));
 };
 
-const storeVoiceSessionId = (value) => {
+const storeVoiceSessionId = (appSessionId, value) => {
   if (typeof window === 'undefined') return;
   if (!value) {
-    window.localStorage.removeItem(SALES_VOICE_SESSION_STORAGE_KEY);
+    window.localStorage.removeItem(voiceKey(appSessionId));
     return;
   }
-  window.localStorage.setItem(SALES_VOICE_SESSION_STORAGE_KEY, value);
+  window.localStorage.setItem(voiceKey(appSessionId), value);
 };
 
 const DIFFICULTY_LABELS = {
@@ -43,7 +45,9 @@ const DISC_COLORS = {
 
 const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => {
   const [appSessionId, setAppSessionId] = useState(sessionId || null);
-  const [voiceSessionId, setVoiceSessionId] = useState(() => readStoredVoiceSessionId());
+  const [voiceSessionId, setVoiceSessionId] = useState(() =>
+    readStoredVoiceSessionId(sessionId || null)
+  );
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isInitializing, setIsInitializing] = useState(false);
@@ -51,7 +55,7 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
   const [errorMessage, setErrorMessage] = useState(null);
 
   const initStartedRef = useRef({});
-  const initialMessageAppliedRef = useRef(new Set());
+  const initialMessageAppliedRef = useRef({});
   const messagesRef = useRef(messages);
   const listEndRef = useRef(null);
 
@@ -64,6 +68,17 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
       setAppSessionId(sessionId);
     }
   }, [sessionId, appSessionId]);
+
+  useEffect(() => {
+    if (!appSessionId) return;
+    const storedVoiceId = readStoredVoiceSessionId(appSessionId);
+    setVoiceSessionId(storedVoiceId);
+    setMessages([]);
+    setErrorMessage(null);
+    setInputValue('');
+    setIsInitializing(false);
+    setIsSending(false);
+  }, [appSessionId]);
 
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -111,17 +126,17 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
         throw new Error('Chýba identifikátor hlasovej relácie.');
       }
 
+      setVoiceSessionId(createdSessionId);
+      storeVoiceSessionId(appSessionId, createdSessionId);
+
       const shouldApplyInitialMessage =
         data?.initial_message?.content &&
         data?.initial_message?.role &&
-        createdSessionId !== voiceSessionId &&
-        !initialMessageAppliedRef.current.has(createdSessionId);
-
-      setVoiceSessionId(createdSessionId);
-      storeVoiceSessionId(createdSessionId);
+        !initialMessageAppliedRef.current[appSessionId] &&
+        messagesRef.current.length === 0;
 
       if (shouldApplyInitialMessage) {
-        initialMessageAppliedRef.current.add(createdSessionId);
+        initialMessageAppliedRef.current[appSessionId] = true;
         const initialRole = data.initial_message.role;
         setMessages((prev) => [
           ...prev,
@@ -209,11 +224,12 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
   };
 
   const handleResetSession = () => {
-    storeVoiceSessionId(null);
-    if (voiceSessionId) {
-      initialMessageAppliedRef.current.delete(voiceSessionId);
+    storeVoiceSessionId(appSessionId, null);
+    if (appSessionId) {
+      delete initialMessageAppliedRef.current[appSessionId];
     }
     setVoiceSessionId(null);
+    setMessages([]);
     setErrorMessage(null);
     setIsInitializing(false);
     if (appSessionId) {
