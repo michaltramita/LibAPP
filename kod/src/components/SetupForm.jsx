@@ -174,6 +174,8 @@ const SetupForm = ({ onStartMeeting }) => {
 
           <div className="space-y-4">
             <Label
+              id="scenario-select-label"
+              htmlFor="scenario-select-trigger"
               className="text-lg font-semibold text-slate-900 flex items-center gap-2"
             >
               <Briefcase className="w-5 h-5" />
@@ -183,8 +185,10 @@ const SetupForm = ({ onStartMeeting }) => {
               <PopoverTrigger asChild>
                 <button
                   type="button"
+                  id="scenario-select-trigger"
                   role="combobox"
                   aria-expanded={scenarioOpen}
+                  aria-labelledby="scenario-select-label"
                   className="flex w-full min-h-[52px] items-center justify-between gap-3 rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-left text-base leading-normal text-slate-900 shadow-sm transition-colors hover:border-red-200 focus-visible:border-[#B81547] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B81547]/20"
                 >
                   <span
