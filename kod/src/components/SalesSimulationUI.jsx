@@ -51,6 +51,7 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
   const [errorMessage, setErrorMessage] = useState(null);
 
   const initStartedRef = useRef({});
+  const initialMessageAppliedRef = useRef(new Set());
   const messagesRef = useRef(messages);
   const listEndRef = useRef(null);
 
@@ -110,11 +111,18 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
         throw new Error('Chýba identifikátor hlasovej relácie.');
       }
 
+      const shouldApplyInitialMessage =
+        data?.initial_message?.content &&
+        data?.initial_message?.role &&
+        createdSessionId !== voiceSessionId &&
+        !initialMessageAppliedRef.current.has(createdSessionId);
+
       setVoiceSessionId(createdSessionId);
       storeVoiceSessionId(createdSessionId);
 
-      if (data?.initial_message?.content) {
-        const initialRole = data.initial_message.role || 'client';
+      if (shouldApplyInitialMessage) {
+        initialMessageAppliedRef.current.add(createdSessionId);
+        const initialRole = data.initial_message.role;
         setMessages((prev) => [
           ...prev,
           {
@@ -202,6 +210,9 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
 
   const handleResetSession = () => {
     storeVoiceSessionId(null);
+    if (voiceSessionId) {
+      initialMessageAppliedRef.current.delete(voiceSessionId);
+    }
     setVoiceSessionId(null);
     setErrorMessage(null);
     setIsInitializing(false);
