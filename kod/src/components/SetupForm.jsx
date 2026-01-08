@@ -180,7 +180,7 @@ const SetupForm = ({ onStartMeeting }) => {
               id="scenario-select"
               value={scenarioKey}
               onChange={(event) => setScenarioKey(event.target.value)}
-              className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-left text-slate-900 focus:border-[#B81547] focus:outline-none"
+              className="w-full min-h-[56px] rounded-xl border-2 border-slate-200 bg-white px-4 py-3 pr-10 text-base leading-normal text-left text-slate-900 focus:border-[#B81547] focus:outline-none focus:ring-2 focus:ring-[#B81547]/20"
             >
               <option value="" disabled>
                 Vyberte scenár
