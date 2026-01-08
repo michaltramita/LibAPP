@@ -294,6 +294,231 @@ const DIFFICULTY_MODIFIERS = {
   },
 };
 
+const ANSWER_SEEDS = {
+  crm_small_business_first_buy: {
+    byStage: {
+      intro: {
+        new: 'Zatiaľ len hľadám spôsob, ako prestať evidovať klientov v tabuľkách a mať rýchly prehľad.',
+        repeat: 'Už máme základnú evidenciu, ale potrebujem rýchlejší prehľad bez manuálu.',
+        default: 'Chceme mať jednoduchší prehľad o klientoch a menej ručnej práce.',
+      },
+      discovery: {
+        new: 'Najviac nás brzdí, že sa strácajú leady a obchodníci reagujú neskoro.',
+        repeat: 'Pri súčasnom procese máme výpadky vo follow-upe a chcem to zjednodušiť.',
+        default: 'Potrebujeme zlepšiť follow-up a nechať zmiznúť manuálne kroky.',
+      },
+      presentation: {
+        new: 'Ak to viete nasadiť do 4 týždňov a pomôcť s migráciou, je to pre nás hodnotné.',
+        repeat: 'Keď zachováte naše dáta a zaučíte tím bez výpadkov, viem si obhájiť rozpočet.',
+        default: 'Potrebujem rýchle nasadenie a bezpečnú migráciu bez výpadkov.',
+      },
+      closing: {
+        new: 'Ak dostanem jasný plán nasadenia a podporu pri migrácii, vieme ísť do ďalšieho kroku.',
+        repeat: 'Keď máme potvrdený plán rolloutov a podporu, posuniem to k rozhodnutiu.',
+        default: 'Ak si potvrdíme plán a podporu, viem to posunúť ďalej.',
+      },
+    },
+    focus: {
+      kpi: {
+        byClient: {
+          new: 'Chcel by som sledovať počet nových leadov, konverziu na obchod a čas reakcie obchodníka.',
+          repeat: 'Sledujeme hlavne konverziu, čas reakcie tímu a objem uzavretých obchodov.',
+        },
+        byStage: {
+          intro: 'Zatiaľ je to orientačný zoznam, nech máme jasný smer.',
+          discovery: 'Podľa toho si nastavíme procesy a reporting.',
+          presentation: 'Potrebujem to vidieť v konkrétnych číslach a reporte.',
+          closing: 'Ak sa na tom zhodneme, vieme to dať do dohody.',
+        },
+      },
+      budget: {
+        byClient: {
+          new: 'Rozpočet máme limitovaný, potrebujem jasne vidieť návratnosť.',
+          repeat: 'Rozpočet je pevný, takže musím obhájiť každé euro navyše.',
+        },
+        byStage: {
+          intro: 'Zatiaľ len mapujem, či to vôbec dáva finančný zmysel.',
+          discovery: 'Potrebujem vedieť, kde ušetríme čas alebo zvýšime obrat.',
+          presentation: 'Bez jasnej ROI do toho nepôjdeme.',
+          closing: 'Ak to sedí v rozpočte, vieme ísť do schvaľovania.',
+        },
+      },
+      implementation: {
+        byClient: {
+          new: 'Ideálne do 4 týždňov, s jasným plánom migrácie a školenia.',
+          repeat: 'Chceme rollout bez výpadkov a rýchle zaškolenie tímu.',
+        },
+        byStage: {
+          intro: 'Potrebujem vedieť, či je to reálne stihnuteľné.',
+          discovery: 'Čas nasadenia je pre nás kľúčový.',
+          presentation: 'Očakávam konkrétny harmonogram a zodpovednosti.',
+          closing: 'Ak to viete garantovať, vieme dohodnúť termín.',
+        },
+      },
+      risk: {
+        byClient: {
+          new: 'Najviac sa obávam migrácie dát a času na zaškolenie.',
+          repeat: 'Rizikom je pre nás výpadok a strata kvality dát.',
+        },
+        byStage: {
+          intro: 'Potrebujem uistiť, že to bude bez chaosu.',
+          discovery: 'Chcem mať istotu, že riziká sú ošetrené.',
+          presentation: 'Potrebujem vidieť, ako minimalizujete riziká.',
+          closing: 'Ak máte jasný plán mitigácie, viem to posunúť ďalej.',
+        },
+      },
+    },
+  },
+  crm_repeat_sale_expansion: {
+    byStage: {
+      intro: {
+        new: 'Zatiaľ len zvažujeme rozšírenie CRM o marketing a chcem vidieť potenciál konverzií.',
+        repeat: 'CRM používame rok a teraz riešime rozšírenie o marketingovú automatizáciu.',
+        default: 'Zvažujeme rozšírenie CRM o marketing s jasným prínosom.',
+      },
+      discovery: {
+        new: 'Potrebujem vidieť, ako to zvýši konverzie a zapojí tím.',
+        repeat: 'Očakávame merateľný nárast konverzií a jasný plán rolloutov bez výpadkov.',
+        default: 'Potrebujeme merateľný nárast konverzií a bezpečný rollout.',
+      },
+      presentation: {
+        new: 'Ak viete ukázať čísla z podobných nasadení, bude to pre nás zaujímavé.',
+        repeat: 'Finančný riaditeľ chce KPI a ja potrebujem dôkaz, že konverzie pôjdu hore.',
+        default: 'Potrebujem dôkazy o dopade na konverzie.',
+      },
+      closing: {
+        new: 'Ak dohodneme KPI a harmonogram bez výpadkov, posuniem to ďalej.',
+        repeat: 'Keď dostaneme záväzný plán rolloutov a KPI reporting, viem to obhájiť aj u CFO.',
+        default: 'Ak si zafixujeme KPI a plán, viem to posunúť ďalej.',
+      },
+    },
+    focus: {
+      kpi: {
+        byClient: {
+          new: 'Chcem sledovať nárast konverzií z leadu na obchod, ROI kampaní a adopciu tímu.',
+          repeat: 'Sledujeme konverzie, ROI kampaní a mieru využívania nových modulov.',
+        },
+        byStage: {
+          intro: 'Zatiaľ si to len rámcovo nastavujeme.',
+          discovery: 'Podľa toho budeme hodnotiť úspech.',
+          presentation: 'Potrebujem k tomu konkrétne čísla a benchmark.',
+          closing: 'Ak na tom bude reporting, viem to uzavrieť.',
+        },
+      },
+      budget: {
+        byClient: {
+          new: 'Rozpočet musí byť krytý návratnosťou, inak to neprejde.',
+          repeat: 'Bez jasnej ROI to finančný riaditeľ neschváli.',
+        },
+        byStage: {
+          intro: 'Potrebujem vedieť, či to vôbec zapadá do rozpočtu.',
+          discovery: 'Chcem vidieť prínos oproti nákladom.',
+          presentation: 'Potrebujem jasnú návratnosť v číslach.',
+          closing: 'Ak to sedí, vieme ísť do schvaľovania.',
+        },
+      },
+      implementation: {
+        byClient: {
+          new: 'Potrebujeme rollout bez výpadkov a jasný harmonogram.',
+          repeat: 'Chceme to nasadiť bez výpadkov a bez chaosu pre tím.',
+        },
+        byStage: {
+          intro: 'Zaujíma ma, či to viete zvládnuť bez výpadkov.',
+          discovery: 'Čas a plynulosť rolloutov sú kľúčové.',
+          presentation: 'Potrebujem konkrétny rollout plán.',
+          closing: 'Ak to máte pokryté, vieme ísť ďalej.',
+        },
+      },
+      risk: {
+        byClient: {
+          new: 'Najväčšie riziko je výpadok počas rolloutov.',
+          repeat: 'Riziko vidím vo výpadkoch a v zhoršení konverzií.',
+        },
+        byStage: {
+          intro: 'Potrebujem istotu, že to nebude brzdiť tím.',
+          discovery: 'Chcem vedieť, ako riziká ošetríte.',
+          presentation: 'Potrebujem jasný plán mitigácie.',
+          closing: 'Ak to viete garantovať, posúvam to ďalej.',
+        },
+      },
+    },
+  },
+  pricing_pushback_procurement: {
+    byStage: {
+      intro: {
+        new: 'Sme z nákupu a teraz porovnávame viacerých dodávateľov, takže je pre nás dôležitá hodnota vs. cena.',
+        repeat: 'Dodávateľa poznáme, ale teraz tlačíme na cenu a transparentné podmienky.',
+        default: 'Porovnávame ponuky a tlačíme na hodnotu za cenu.',
+      },
+      discovery: {
+        new: 'Potrebujem mať jasné SLA, porovnateľnú cenu a proces schvaľovania.',
+        repeat: 'Nákup potrebuje transparentné podmienky a obhájiteľnú cenu v schvaľovaní.',
+        default: 'Potrebujeme jasné SLA a obhájiteľnú cenu.',
+      },
+      presentation: {
+        new: 'Ak viete ukázať hodnotu a SLA oproti konkurencii, môžeme pokračovať.',
+        repeat: 'Bez jasných SLA a argumentov k hodnote zľavu neobhájim.',
+        default: 'Potrebujem jasné SLA a hodnotu oproti konkurencii.',
+      },
+      closing: {
+        new: 'Ak dodáte porovnateľnú ponuku a podmienky, spustíme formálne schválenie.',
+        repeat: 'Keď dostaneme finálnu ponuku so SLA a cenou, posuniem to do schvaľovania.',
+        default: 'Ak dostaneme finálnu ponuku, vieme ísť do schvaľovania.',
+      },
+    },
+    focus: {
+      kpi: {
+        byClient: {
+          new: 'Sledujeme hlavne celkovú cenu, SLA dostupnosť a čas plnenia služieb.',
+          repeat: 'Kľúčové sú celkové náklady, SLA a splnenie procesných podmienok.',
+        },
+        byStage: {
+          intro: 'Chcem mať jasné porovnateľné metriky.',
+          discovery: 'Podľa toho vieme porovnávať dodávateľov.',
+          presentation: 'Potrebujem presné čísla a SLA report.',
+          closing: 'Ak to splníte, vieme to schváliť.',
+        },
+      },
+      budget: {
+        byClient: {
+          new: 'Cena je pre nás citlivá a potrebujeme transparentnú štruktúru.',
+          repeat: 'Rozhoduje cena a obhájiteľná hodnota.',
+        },
+        byStage: {
+          intro: 'Potrebujem vedieť, či sme v cenovom rámci.',
+          discovery: 'Chcem vidieť, čo presne za to dostaneme.',
+          presentation: 'Bez jasnej hodnoty zľavu neobhájim.',
+          closing: 'Ak to sedí v cene, posúvam to ďalej.',
+        },
+      },
+      implementation: {
+        byClient: {
+          new: 'Potrebujeme jasný proces zavedenia a SLA bez výpadkov.',
+          repeat: 'Proces musí byť transparentný a bez rizika výpadku.',
+        },
+        byStage: {
+          intro: 'Chcem vedieť, či je proces zavedenia štandardný.',
+          discovery: 'Dôležité je, aby to sedelo do nášho schvaľovania.',
+          presentation: 'Potrebujem jasné kroky a zodpovednosti.',
+          closing: 'Ak to máme v procese, vieme to schváliť.',
+        },
+      },
+      risk: {
+        byClient: {
+          new: 'Rizikom je nedodržanie SLA alebo netransparentné podmienky.',
+          repeat: 'Riziko vidím v nejasných podmienkach a SLA.',
+        },
+        byStage: {
+          intro: 'Potrebujem istotu, že sú podmienky jasné.',
+          discovery: 'Chcem vidieť, ako SLA garantujete.',
+          presentation: 'Potrebujem zmluvné garancie.',
+          closing: 'Ak to potvrdíte, vieme to uzavrieť.',
+        },
+      },
+    },
+  },
+};
+
 module.exports = async function handler(req, res) {
   setCorsHeaders(req, res);
 
@@ -1180,6 +1405,8 @@ async function generateClientReply({
     typeof scenarioKey === 'string' && scenarioKey.trim()
       ? scenarioKey.trim()
       : DEFAULT_SCENARIO_KEY;
+  const resolvedScenario = resolveScenario(resolvedScenarioKey);
+  const scenarioData = { ...resolvedScenario, key: resolvedScenarioKey };
   const inputType = classifySalesmanInput(latestMessage);
   const replyMode = resolveReplyMode({
     inputType,
@@ -1201,7 +1428,7 @@ async function generateClientReply({
     triggers,
     maxQuestions,
     inputType,
-    scenarioContext: resolvedScenarioContext,
+    scenario: scenarioData,
   });
   plan.replyMode = replyMode;
 
@@ -1417,6 +1644,68 @@ function buildSmallTalkPlan({ stage, salesmanCount }) {
   };
 }
 
+function resolveAnswerFocus(latestMessage) {
+  const message = typeof latestMessage === 'string' ? latestMessage.trim() : '';
+  const lower = message.toLowerCase();
+  if (!lower) return null;
+
+  if (/(kpi|metr|konverz|obrat|roi|úspech|uspech|merateľ|meratel)/i.test(lower)) {
+    return 'kpi';
+  }
+  if (/(rozpočet|rozpocet|cena|cenn[íi]k|náklad|naklad|budget|zľav|zlava)/i.test(lower)) {
+    return 'budget';
+  }
+  if (/(implement|nasaden|migr[aá]c|čas|cas|term[íi]n|kedy|rollout)/i.test(lower)) {
+    return 'implementation';
+  }
+  if (/(rizik|obav|bezpeč|bezpec|výpad|vypad)/i.test(lower)) {
+    return 'risk';
+  }
+  if (/(ďalší krok|dalsi krok|next step|kedy môžeme|kedy mozeme)/i.test(lower)) {
+    return 'next_step';
+  }
+
+  return null;
+}
+
+function applyDiscTone(text, discType) {
+  const trimmed = typeof text === 'string' ? text.trim() : '';
+  if (!trimmed) return '';
+  const modifiers = {
+    D: 'Stručne, ',
+    I: 'Úprimne, ',
+    S: 'Pokojne, ',
+    C: 'Fakticky, ',
+  };
+  const prefix = modifiers[discType];
+  if (!prefix) return trimmed;
+  return `${prefix}${trimmed}`;
+}
+
+function buildAnswerSeed({ latestMessage, stage, scenario, clientType, discType }) {
+  const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
+  const normalizedClientType = normalizeClientType(clientType);
+  const normalizedDisc = normalizedClientType === 'repeat' ? normalizeDisc(discType) : 'neutral';
+  const scenarioKey = scenario?.key || DEFAULT_SCENARIO_KEY;
+  const scenarioSeeds = ANSWER_SEEDS[scenarioKey] || ANSWER_SEEDS[DEFAULT_SCENARIO_KEY];
+  const focus = resolveAnswerFocus(latestMessage);
+  const focusSeed = focus ? scenarioSeeds?.focus?.[focus] : null;
+
+  const stageSeeds = scenarioSeeds?.byStage?.[normalizedStage] || {};
+  const primary =
+    focusSeed?.byClient?.[normalizedClientType] ||
+    stageSeeds?.[normalizedClientType] ||
+    stageSeeds?.default ||
+    '';
+  const stageAddition = focusSeed?.byStage?.[normalizedStage] || '';
+
+  const sentences = [];
+  if (primary) sentences.push(primary);
+  if (stageAddition) sentences.push(stageAddition);
+  const combined = sentences.join(' ').trim();
+  return applyDiscTone(combined, normalizedDisc);
+}
+
 /**
  * @typedef {Object} ReplyPlan
  * @property {"sk"} language
@@ -1442,7 +1731,7 @@ function buildReplyPlan({
   triggers,
   maxQuestions,
   inputType,
-  scenarioContext,
+  scenario,
 }) {
   const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
   const normalizedDifficulty = normalizeDifficulty(difficulty);
@@ -1450,6 +1739,16 @@ function buildReplyPlan({
   const base = BASE_BY_STAGE[normalizedStage];
   const resolvedTriggers = triggers || detectTriggers(latestMessage, normalizedStage);
   const difficultyModifiers = DIFFICULTY_MODIFIERS[normalizedDifficulty];
+  const answerSeed =
+    inputType === 'question'
+      ? buildAnswerSeed({
+          latestMessage,
+          stage: normalizedStage,
+          scenario,
+          clientType: normalizedClientType,
+          discType: clientDiscType,
+        })
+      : base.defaultReaction;
 
   if (inputType === 'greeting_smalltalk') {
     const smallTalk = buildSmallTalkPlan({ stage: normalizedStage, salesmanCount });
@@ -1462,7 +1761,7 @@ function buildReplyPlan({
       tone: 'friendly',
       goal: base.goal,
       constraints: [],
-      scenarioContext,
+      scenarioContext: scenario,
       questions: smallTalk.questions.slice(0, maxQuestions),
       reaction,
     };
@@ -1508,12 +1807,15 @@ function buildReplyPlan({
     tone: ruleSet.tone,
     goal: base.goal,
     constraints,
-    scenarioContext,
+    scenarioContext: scenario,
     questions,
-    reaction: base.defaultReaction,
+    reaction: answerSeed || base.defaultReaction,
   };
 
   plan = applyTriggers(plan, resolvedTriggers);
+  if (inputType === 'question') {
+    plan.reaction = answerSeed || base.defaultReaction;
+  }
 
   if (plan.stage === 'intro') {
     plan.constraints = [];
