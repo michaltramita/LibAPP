@@ -95,6 +95,8 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
           client_type: config?.clientType,
           client_disc_type: config?.clientDiscType,
           scenario_key: config?.scenarioKey,
+          topic: config?.topic,
+          industry: config?.industry,
         }),
       });
 
@@ -110,6 +112,18 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
 
       setVoiceSessionId(createdSessionId);
       storeVoiceSessionId(createdSessionId);
+
+      if (data?.initial_message?.content) {
+        const initialRole = data.initial_message.role || 'client';
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: initialRole,
+            text: data.initial_message.content,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+      }
     } catch (error) {
       console.error(error);
       setErrorMessage(error?.message || 'Nepodarilo sa inicializovať reláciu.');

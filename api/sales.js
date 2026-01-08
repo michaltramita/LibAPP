@@ -54,6 +54,7 @@ const SCENARIOS = {
 };
 
 const DEFAULT_SCENARIO_KEY = 'crm_small_business_first_buy';
+const DEFAULT_SCENARIO = SCENARIOS[DEFAULT_SCENARIO_KEY];
 
 const BASE_BY_STAGE = {
   intro: {
@@ -458,6 +459,8 @@ async function handleSession(req, res) {
       ? body.scenario_key
       : typeof body.scenarioKey === 'string'
         ? body.scenarioKey
+        : typeof body.scenario_id === 'string'
+          ? body.scenario_id
         : null;
   const scenarioKeyResult = normalizeScenarioKey(scenarioKeyInput);
   if (scenarioKeyResult.error) {
@@ -465,6 +468,10 @@ async function handleSession(req, res) {
     return;
   }
   const scenarioKey = scenarioKeyResult.value;
+  const topic =
+    typeof body.topic === 'string' && body.topic.trim() ? body.topic.trim() : null;
+  const industry =
+    typeof body.industry === 'string' && body.industry.trim() ? body.industry.trim() : null;
   const moduleValue =
     typeof body.module === 'string' && body.module.trim()
       ? body.module.trim()
@@ -478,7 +485,7 @@ async function handleSession(req, res) {
     if (requestedSessionId) {
       const { data: existingSessions, error: existingSessionError } = await supabase
         .from('sales_voice_sessions')
-        .select('id,user_id')
+        .select('id,user_id,difficulty,client_type,client_disc_type,scenario_key')
         .eq('id', requestedSessionId)
         .eq('user_id', userId)
         .limit(1);
@@ -502,7 +509,32 @@ async function handleSession(req, res) {
           );
         }
 
-        res.status(200).json({ ok: true, session_id: existingSession.id });
+        const { initialMessage, error: initialMessageError } = await ensureInitialClientMessage({
+          supabase,
+          sessionId: existingSession.id,
+          scenarioKey: existingSession.scenario_key,
+          difficulty: existingSession.difficulty,
+          clientType: existingSession.client_type,
+          clientDiscType: existingSession.client_disc_type,
+          topic,
+          industry,
+        });
+
+        if (initialMessageError) {
+          console.error('[sales-api] failed to create initial message', initialMessageError);
+          handleSupabaseFailure(
+            res,
+            initialMessageError,
+            'Unable to create initial client message'
+          );
+          return;
+        }
+
+        res.status(200).json({
+          ok: true,
+          session_id: existingSession.id,
+          ...(initialMessage ? { initial_message: initialMessage } : {}),
+        });
         return;
       }
     }
@@ -543,7 +575,32 @@ async function handleSession(req, res) {
       console.log(`[sales-api] session created user=${userId.slice(0, 8)} session=${sessionId}`);
     }
 
-    res.status(200).json({ ok: true, session_id: sessionId });
+    const { initialMessage, error: initialMessageError } = await ensureInitialClientMessage({
+      supabase,
+      sessionId,
+      scenarioKey,
+      difficulty,
+      clientType,
+      clientDiscType,
+      topic,
+      industry,
+    });
+
+    if (initialMessageError) {
+      console.error('[sales-api] failed to create initial message', initialMessageError);
+      handleSupabaseFailure(
+        res,
+        initialMessageError,
+        'Unable to create initial client message'
+      );
+      return;
+    }
+
+    res.status(200).json({
+      ok: true,
+      session_id: sessionId,
+      ...(initialMessage ? { initial_message: initialMessage } : {}),
+    });
   } catch (err) {
     console.error('[sales-api] session handler error', err);
     res.status(500).json({ ok: false, error: 'Internal server error' });
@@ -571,21 +628,18 @@ function resolveScenario(key) {
 }
 
 function normalizeScenarioKey(value) {
+  if (value === null || value === undefined) {
+    return { value: null, error: null };
+  }
   if (typeof value !== 'string') {
-    return { value: DEFAULT_SCENARIO_KEY, error: null };
+    return { value: null, error: 'invalid_type' };
   }
   const trimmed = value.trim();
   if (!trimmed) {
-    return { value: DEFAULT_SCENARIO_KEY, error: null };
+    return { value: null, error: null };
   }
   if (trimmed.length > MAX_SCENARIO_KEY_LENGTH) {
     return { value: null, error: 'too_long' };
-  }
-  if (!SCENARIO_KEY_PATTERN.test(trimmed)) {
-    return { value: null, error: 'invalid_format' };
-  }
-  if (!Object.prototype.hasOwnProperty.call(SCENARIOS, trimmed)) {
-    return { value: null, error: 'unknown_key' };
   }
   return { value: trimmed, error: null };
 }
@@ -605,6 +659,245 @@ ${constraintLines.map((line) => `- ${line}`).join('\n')}
 [/SCENARIO_CONTEXT]`;
 
   return content.length > 1200 ? `${content.slice(0, 1190)}…` : content;
+}
+
+function resolveOpeningContext({ scenarioKey, topic, industry }) {
+  const resolvedKey =
+    typeof scenarioKey === 'string' && scenarioKey.trim() ? scenarioKey.trim() : null;
+  const resolvedTopic = typeof topic === 'string' && topic.trim() ? topic.trim() : null;
+  const resolvedIndustry =
+    typeof industry === 'string' && industry.trim() ? industry.trim() : null;
+
+  if (resolvedKey) {
+    return {
+      scenarioKey: resolvedKey,
+      scenario: resolveScenario(resolvedKey),
+      topic: null,
+      industry: null,
+      source: 'scenario_key',
+    };
+  }
+
+  if (resolvedTopic || resolvedIndustry) {
+    return {
+      scenarioKey: null,
+      scenario: null,
+      topic: resolvedTopic,
+      industry: resolvedIndustry,
+      source: 'topic_industry',
+    };
+  }
+
+  return {
+    scenarioKey: DEFAULT_SCENARIO_KEY,
+    scenario: resolveScenario(DEFAULT_SCENARIO_KEY),
+    topic: null,
+    industry: null,
+    source: 'default',
+  };
+}
+
+function buildOpeningScenarioContext(context) {
+  if (context?.scenario) {
+    return buildScenarioSystemMessage(context.scenario);
+  }
+
+  const title = context?.topic || 'Neurčený kontext';
+  const summaryParts = [];
+  if (context?.topic) {
+    summaryParts.push(`Téma: ${context.topic}.`);
+  }
+  if (context?.industry) {
+    summaryParts.push(`Odvetvie: ${context.industry}.`);
+  }
+  const summary = summaryParts.join(' ') || '-';
+
+  const content = `[SCENARIO_CONTEXT]
+title: ${title}
+summary: ${summary}
+details: ${summary}
+constraints:
+- -
+[/SCENARIO_CONTEXT]`;
+
+  return content.length > 1200 ? `${content.slice(0, 1190)}…` : content;
+}
+
+function resolveOpeningTone({ clientType, clientDiscType }) {
+  const normalizedClientType = normalizeClientType(clientType);
+  if (normalizedClientType !== 'repeat') {
+    return { tone: 'neutral', disc: 'neutral' };
+  }
+  const disc = normalizeDisc(clientDiscType);
+  const toneByDisc = {
+    D: 'direct',
+    I: 'friendly',
+    S: 'calm',
+    C: 'analytical',
+  };
+  return { tone: toneByDisc[disc] || 'neutral', disc };
+}
+
+function buildOpeningFallbackMessage({ context, tone }) {
+  const scenarioKey = context?.scenarioKey || DEFAULT_SCENARIO_KEY;
+  const scenarioSentenceMap = {
+    crm_small_business_first_buy:
+      'Sme malá firma, stále evidujeme zákazníkov v tabuľkách a chceme to zjednodušiť.',
+    crm_repeat_sale_expansion:
+      'CRM už používame a teraz riešime rozšírenie o marketingovú automatizáciu, ale potrebujeme jasný prínos.',
+    pricing_pushback_procurement:
+      'Sme z nákupu a porovnávame viac dodávateľov, pritom sme citliví na cenu a podmienky.',
+  };
+  const topicSentence = context?.topic || context?.industry
+    ? `Riešime ${context?.topic || 'túto oblasť'}${context?.industry ? ` v odvetví ${context.industry}` : ''}.`
+    : null;
+  const contextSentence =
+    scenarioSentenceMap[scenarioKey] || topicSentence || scenarioSentenceMap[DEFAULT_SCENARIO_KEY];
+
+  const openingByTone = {
+    direct: 'Dobrý deň, potrebujem sa v tom posunúť rýchlo.',
+    friendly: 'Dobrý deň, teším sa na stretnutie.',
+    calm: 'Dobrý deň, chcem to prejsť pokojne.',
+    analytical: 'Dobrý deň, rád by som si ujasnil situáciu.',
+    neutral: 'Dobrý deň, rád by som to krátko prebral.',
+  };
+  const questionByTone = {
+    direct: 'Môžete mi stručne povedať, ako k tomu pristupujete?',
+    friendly: 'Som zvedavý, čo by ste nám navrhli.',
+    calm: 'Môžete mi stručne povedať, ako k tomu pristupujete?',
+    analytical: 'Aký postup by ste odporučili?',
+    neutral: 'Môžete mi stručne povedať, ako k tomu pristupujete?',
+  };
+  const openingSentence = openingByTone[tone] || openingByTone.neutral;
+  const questionSentence = questionByTone[tone] || questionByTone.neutral;
+
+  return `${openingSentence} ${contextSentence} ${questionSentence}`.trim();
+}
+
+function isValidOpeningMessage(text) {
+  const cleaned = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  if (!cleaned) return false;
+  if (/REAKCIA:|OTÁZKA:/i.test(cleaned)) return false;
+  const questionCount = (cleaned.match(/\?/g) || []).length;
+  if (questionCount > 1) return false;
+  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (sentences.length < 1 || sentences.length > 3) return false;
+  return true;
+}
+
+async function generateOpeningClientMessage({
+  scenarioKey,
+  topic,
+  industry,
+  difficulty,
+  clientType,
+  clientDiscType,
+}) {
+  const context = resolveOpeningContext({ scenarioKey, topic, industry });
+  const scenarioContext = buildOpeningScenarioContext(context);
+  const normalizedDifficulty = normalizeDifficulty(difficulty);
+  const { tone, disc } = resolveOpeningTone({ clientType, clientDiscType });
+  const scenarioKeyLabel =
+    context.scenarioKey || (context.topic || context.industry ? 'topic_industry' : DEFAULT_SCENARIO_KEY);
+
+  try {
+    const llm = createLLMClient();
+    const systemPrompt = 'Si reálny klient na začiatku obchodného stretnutia.';
+    const developerPrompt = `Vytvor úvodnú klientsku správu pre začiatok stretnutia.
+Požiadavky:
+- Slovenčina.
+- 1-3 krátke vety.
+- Znieť ako skutočný klient na začiatku stretnutia.
+- Bez označení typu "REAKCIA:" alebo "OTÁZKA:".
+- Maximálne 1 otázka, žiadne zoznamy otázok.
+- Prirodzene spomeň kontext a čo chcete dosiahnuť.
+- Zakonči neutrálne alebo jednou jednoduchou otázkou.
+Kontext:
+- scenario_key: ${scenarioKeyLabel}
+- klient: ${normalizeClientType(clientType)} (DISC: ${disc})
+- náročnosť: ${normalizedDifficulty}
+- tón: ${tone}`;
+
+    const messages = [
+      { role: 'system', content: scenarioContext },
+      { role: 'system', content: systemPrompt },
+      { role: 'developer', content: developerPrompt },
+      { role: 'user', content: 'Začni rozhovor.' },
+    ];
+
+    let buffer = '';
+    let chunks = 0;
+    const maxChunks = 200;
+    for await (const chunk of llm.streamChat({ messages })) {
+      chunks += 1;
+      if (chunk.type === 'token' && chunk.content) {
+        buffer += chunk.content;
+      }
+      if (chunk.type === 'final') {
+        buffer = chunk.content || buffer;
+        break;
+      }
+      if (chunks >= maxChunks) {
+        break;
+      }
+    }
+
+    const finalReply = typeof buffer === 'string' ? buffer.trim() : '';
+    const normalized = enforceMaxLength(finalReply, 300);
+    if (isValidOpeningMessage(normalized)) {
+      return normalized;
+    }
+  } catch (error) {
+    console.error('[sales-api] opening message render failed', error);
+  }
+
+  return enforceMaxLength(buildOpeningFallbackMessage({ context, tone }), 300);
+}
+
+async function ensureInitialClientMessage({
+  supabase,
+  sessionId,
+  scenarioKey,
+  difficulty,
+  clientType,
+  clientDiscType,
+  topic,
+  industry,
+}) {
+  const { count, error: messageCountError } = await supabase
+    .from('sales_voice_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', sessionId);
+
+  if (messageCountError) {
+    return { initialMessage: null, error: messageCountError };
+  }
+
+  if (count && count > 0) {
+    return { initialMessage: null, error: null };
+  }
+
+  const openingMessage = await generateOpeningClientMessage({
+    scenarioKey,
+    topic,
+    industry,
+    difficulty,
+    clientType,
+    clientDiscType,
+  });
+
+  const { error: insertError } = await supabase
+    .from('sales_voice_messages')
+    .insert([{ session_id: sessionId, role: 'client', content: openingMessage }]);
+
+  if (insertError) {
+    return { initialMessage: null, error: insertError };
+  }
+
+  return {
+    initialMessage: { role: 'client', content: openingMessage },
+    error: null,
+  };
 }
 
 async function handleMessage(req, res) {
@@ -632,11 +925,6 @@ async function handleMessage(req, res) {
     const details = `Missing or invalid fields: ${missingFields.join(', ')}`;
     console.warn(`[sales] message validation failed: ${details}`);
     res.status(400).json({ ok: false, error: 'missing_fields', details });
-    return;
-  }
-
-  if (roleValue === 'system') {
-    res.status(403).json({ ok: false, error: 'forbidden_role' });
     return;
   }
 
