@@ -1231,7 +1231,7 @@ async function generateClientReply({
   if (rendered) {
     return enforceMaxLength(rendered, 400);
   }
-  return enforceMaxLength(renderPlanFallback(plan, replyMode), 400);
+  return enforceMaxLength(renderPlanFallback(plan, replyMode, maxQuestions), 400);
 }
 
 function normalizeDifficulty(value) {
@@ -1626,19 +1626,13 @@ ${scenarioBlock}
 Reply mode: ${plan.replyMode}
 Max počet otázok: ${maxQuestions}
 Pravidlá:
-- Odpoveď musí byť po slovensky.
-- Drž sa otázok, reakcie, constraints a nextStepType.
-- Reaguj v súlade so scenárom zo systémovej správy [SCENARIO_CONTEXT].
+- Vráť iba prirodzený slovenský text.
+- Použi plan.reaction a podľa potreby jednu z plan.questions.
+- Ak replyMode = statement_only alebo maxQuestions = 0: nekladieš žiadnu otázku.
+- Ak replyMode = statement_then_question: maximálne 1 otázka.
+- Žiadne označenia, nadpisy ani odrážky.
 - Žiadne školenie obchodníka ani meta poznámky.
-- Odpoveď má mať max 60 slov.
-- Použi presne tento formát, každý riadok na nový riadok:
-REAKCIA: <1-2 krátke vety>
-OTÁZKA: <0-${maxQuestions} otázky; ak 0, napíš "-">
-- Ak replyMode = statement_only: OTÁZKA musí byť "-".
-- Ak replyMode = statement_then_question: OTÁZKA môže byť 1 otázka alebo "-".
-- Ak replyMode = question_only: OTÁZKA musí byť presne 1 otázka; REAKCIA môže byť krátka alebo "-".
-- Ak sú 2 otázky, oddeľ ich " | ".
-- Nikdy neprekroč maxQuestions.`;
+- Odpoveď má max 60 slov.`;
 
     const resolvedHistory = Array.isArray(history) ? history : [];
     const trimmedLatestMessage = typeof latestMessage === 'string' ? latestMessage.trim() : '';
@@ -1684,89 +1678,66 @@ OTÁZKA: <0-${maxQuestions} otázky; ak 0, napíš "-">
 }
 
 function normalizeClientReply(rawReply, { replyMode, maxQuestions }) {
-  const lines = rawReply
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const reactionLine = lines.find((line) => line.toUpperCase().startsWith('REAKCIA:'));
-  const questionLine = lines.find((line) => line.toUpperCase().startsWith('OTÁZKA:'));
+  const trimmed = typeof rawReply === 'string' ? rawReply.trim() : '';
+  if (!trimmed) return null;
+  if (/REAKCIA:|OTÁZKA:/i.test(trimmed)) return null;
 
-  if (!reactionLine || !questionLine) {
-    return null;
-  }
+  let cleaned = trimmed.replace(/\s+/g, ' ').trim();
+  const wordCount = cleaned.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 60) return null;
 
-  const reaction = reactionLine.split(':').slice(1).join(':').trim();
-  const questionContent = questionLine.split(':').slice(1).join(':').trim();
-  const rebuiltQuestions = rebuildQuestions(questionContent, { replyMode, maxQuestions });
-  if (!rebuiltQuestions) {
-    return null;
-  }
+  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (!sentences.length || sentences.length > 3) return null;
 
-  const normalizedReaction = normalizeReaction(reaction, replyMode);
-  if (replyMode === 'question_only' && rebuiltQuestions === '-') {
-    return null;
-  }
-
-  return `REAKCIA: ${normalizedReaction}\nOTÁZKA: ${rebuiltQuestions}`;
-}
-
-function normalizeReaction(reaction, replyMode) {
-  const trimmed = typeof reaction === 'string' ? reaction.trim() : '';
-  if (replyMode === 'question_only') {
-    return trimmed && trimmed !== '-' ? trimmed : '-';
-  }
-  return trimmed || '-';
-}
-
-function rebuildQuestions(questionContent, { replyMode, maxQuestions }) {
+  const questionCount = (cleaned.match(/\?/g) || []).length;
   if (replyMode === 'statement_only' || maxQuestions === 0) {
-    return '-';
+    if (questionCount > 0) return null;
+    return cleaned;
   }
 
-  if (questionContent === '-') {
-    return replyMode === 'question_only' ? null : '-';
+  if (questionCount <= 1) {
+    return cleaned;
   }
 
-  const questionMatches = questionContent.match(/[^?]+\?/g);
-  let questions = [];
-  if (questionMatches && questionMatches.length) {
-    questions = questionMatches.map((question) => question.trim());
-  } else if (questionContent) {
-    const rawSegments = questionContent.split('|').map((segment) => segment.trim());
-    questions = rawSegments.filter(Boolean).map((segment) =>
-      segment.endsWith('?') ? segment : `${segment}?`
-    );
+  let seenQuestion = false;
+  const keptSentences = [];
+  for (const sentence of sentences) {
+    if (sentence.includes('?')) {
+      if (seenQuestion) continue;
+      seenQuestion = true;
+    }
+    keptSentences.push(sentence);
   }
 
-  const limit = replyMode === 'statement_then_question' ? 1 : Math.max(1, maxQuestions);
-  const limited = questions.slice(0, limit);
-  if (!limited.length) {
-    return replyMode === 'question_only' ? null : '-';
-  }
+  cleaned = keptSentences.join(' ').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+  const normalizedQuestionCount = (cleaned.match(/\?/g) || []).length;
+  if (normalizedQuestionCount <= 1) return cleaned;
 
-  return limited.join(' | ');
+  const firstQuestionIndex = cleaned.indexOf('?');
+  if (firstQuestionIndex === -1) return cleaned;
+  const truncated = cleaned.slice(0, firstQuestionIndex + 1).trim();
+  return truncated || null;
 }
 
-function renderPlanFallback(plan, replyMode) {
+function renderPlanFallback(plan, replyMode, maxQuestions) {
+  const reactionSeed = plan.reaction?.trim() || plan.constraints[0] || '';
   const reactionParts = [];
-  if (plan.reaction) {
-    reactionParts.push(plan.reaction);
-  }
-  if (plan.constraints.length) {
-    reactionParts.push(plan.constraints[0]);
+  if (reactionSeed) {
+    reactionParts.push(reactionSeed);
   }
 
   if (plan.stage === 'closing') {
     reactionParts.push(resolveClosingEnding(plan));
   }
 
-  const reaction = reactionParts.join(' ').trim() || '-';
-  let question = '-';
-  if (replyMode !== 'statement_only' && plan.questions.length) {
+  const reaction = reactionParts.join(' ').trim();
+  let question = '';
+  if (replyMode !== 'statement_only' && maxQuestions > 0 && plan.questions.length) {
     question = plan.questions[0];
   }
 
-  return `REAKCIA: ${normalizeReaction(reaction, replyMode)}\nOTÁZKA: ${question || '-'}`;
+  return [reaction, question].filter(Boolean).join(' ').trim();
 }
 
 function resolveClosingEnding(plan) {
