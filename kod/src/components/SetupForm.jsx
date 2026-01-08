@@ -2,18 +2,15 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
-import { Briefcase, Check, ChevronsUpDown, Play, Target, Users } from 'lucide-react';
+import { Briefcase, Play, Target, Users } from 'lucide-react';
 import { resolveScenarioById, SALES_SCENARIOS } from '@/utils/salesScenarios';
+import ScenarioPicker from '@/components/ScenarioPicker';
 
 const SetupForm = ({ onStartMeeting }) => {
   const [difficulty, setDifficulty] = useState('beginner');
   const [clientType, setClientType] = useState('new');
   const [clientDiscType, setClientDiscType] = useState(null);
   const [scenarioKey, setScenarioKey] = useState('');
-  const [scenarioOpen, setScenarioOpen] = useState(false);
   const selectedScenario = resolveScenarioById(scenarioKey);
 
   const salesmanLevels = [
@@ -175,71 +172,20 @@ const SetupForm = ({ onStartMeeting }) => {
           <div className="space-y-4">
             <Label
               id="scenario-select-label"
-              htmlFor="scenario-select-trigger"
+              htmlFor="scenario-select"
               className="text-lg font-semibold text-slate-900 flex items-center gap-2"
             >
               <Briefcase className="w-5 h-5" />
               Tréningová situácia
             </Label>
-            <Popover open={scenarioOpen} onOpenChange={setScenarioOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  id="scenario-select-trigger"
-                  role="combobox"
-                  aria-expanded={scenarioOpen}
-                  aria-labelledby="scenario-select-label"
-                  className="flex w-full min-h-[52px] items-center justify-between gap-3 rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-left text-base leading-normal text-slate-900 shadow-sm transition-colors hover:border-red-200 focus-visible:border-[#B81547] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B81547]/20"
-                >
-                  <span
-                    className={cn(
-                      'flex-1 text-left',
-                      scenarioKey ? 'text-slate-900' : 'text-slate-500'
-                    )}
-                  >
-                    {scenarioKey ? selectedScenario?.title : 'Vyberte scenár'}
-                  </span>
-                  <ChevronsUpDown className="h-5 w-5 text-slate-400" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="start"
-                className="w-[--radix-popover-trigger-width] rounded-xl border border-slate-200 bg-white p-0 shadow-xl"
-              >
-                <Command className="w-full">
-                  <CommandInput placeholder="Hľadať scenár..." />
-                  <CommandList className="max-h-[320px]">
-                    <CommandEmpty>Žiadny scenár sa nenašiel.</CommandEmpty>
-                    <CommandGroup>
-                      {SALES_SCENARIOS.map((scenario) => (
-                        <CommandItem
-                          key={scenario.id}
-                          value={`${scenario.title} ${scenario.description}`}
-                          onSelect={() => {
-                            setScenarioKey(scenario.id);
-                            setScenarioOpen(false);
-                          }}
-                          className="flex items-start gap-3 py-3"
-                        >
-                          <Check
-                            className={cn(
-                              'mt-1 h-4 w-4 shrink-0 text-[#B81547]',
-                              scenarioKey === scenario.id ? 'opacity-100' : 'opacity-0'
-                            )}
-                          />
-                          <div className="flex flex-col">
-                            <span className="font-semibold text-slate-900">{scenario.title}</span>
-                            <span className="text-sm text-slate-600 truncate">
-                              {scenario.description}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            <ScenarioPicker
+              id="scenario-select"
+              label="Tréningová situácia"
+              value={scenarioKey}
+              onChange={setScenarioKey}
+              scenarios={SALES_SCENARIOS}
+              placeholder="Vyberte scenár"
+            />
             {selectedScenario && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-sm font-semibold text-slate-900">
