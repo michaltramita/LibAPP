@@ -16,6 +16,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { resolveScenarioById, SALES_SCENARIOS } from '@/utils/salesScenarios';
+import ScenarioPicker from '@/components/ScenarioPicker';
 
 export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
   const { user } = useAuth();
@@ -284,28 +285,14 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
 
             {/* Odvetvie a téma stretnutia */}
             <div className="space-y-4 pb-4">
-              <label
-                htmlFor="scenario-select-dialog"
-                className="flex items-center gap-3 text-lg font-semibold text-white"
-              >
-                <Briefcase className="w-5 h-5 text-white opacity-80" />
-                Tréningová situácia
-              </label>
-              <select
-                id="scenario-select-dialog"
+              <ScenarioPicker
+                scenarios={SALES_SCENARIOS}
                 value={scenarioKey}
-                onChange={(event) => setScenarioKey(event.target.value)}
-                className="w-full rounded-2xl border border-white/50 bg-white/10 px-4 py-3 text-white focus:border-white focus:outline-none"
-              >
-                <option value="" disabled>
-                  Vyberte scenár
-                </option>
-                {SALES_SCENARIOS.map((scenario) => (
-                  <option key={scenario.id} value={scenario.id} className="text-slate-900">
-                    {scenario.title}
-                  </option>
-                ))}
-              </select>
+                onChange={setScenarioKey}
+                label="Tréningová situácia"
+                helperText="Vyberte si scenár, na ktorom chcete trénovať."
+                icon={Briefcase}
+              />
               {selectedScenario && (
                 <div className="rounded-2xl border border-white/30 bg-white/10 p-4">
                   <p className="text-sm font-semibold text-white">
@@ -316,9 +303,6 @@ export const StartSessionDialog = ({ moduleCode, open, onOpenChange }) => {
                   </p>
                 </div>
               )}
-              <p className="text-sm text-white px-2 opacity-90">
-                Vyberte si scenár, na ktorom chcete trénovať.
-              </p>
             </div>
           </div>
         </div>
