@@ -1290,7 +1290,38 @@ async function handleMessage(req, res) {
       return;
     }
 
-    res.status(200).json({ ok: true, client_message: clientReplyText, stage });
+    let endPayload = null;
+    try {
+      const { data: recentMessages, error: recentError } = await supabase
+        .from('sales_voice_messages')
+        .select('role,content,created_at,id')
+        .eq('session_id', sessionIdValue)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(6);
+
+      if (recentError) {
+        console.error('[sales-api] failed to fetch recent messages for ending detection', recentError);
+      } else {
+        const endResult = detectSimulationEnd({ stage, recentMessages });
+        if (endResult.ended) {
+          endPayload = {
+            simulation_end: true,
+            end_type: endResult.endType,
+            end_summary: endResult.summary,
+          };
+        }
+      }
+    } catch (endError) {
+      console.error('[sales-api] end detection error', endError);
+    }
+
+    res.status(200).json({
+      ok: true,
+      client_message: clientReplyText,
+      stage,
+      ...(endPayload || {}),
+    });
   } catch (err) {
     console.error('[sales-api] handler error', err);
     res.status(500).json({ ok: false, error: 'Internal server error' });
@@ -1359,6 +1390,88 @@ function resolveStage(salesmanCount) {
   if (salesmanCount <= 3) return 'discovery';
   if (salesmanCount <= 5) return 'presentation';
   return 'closing';
+}
+
+function detectSimulationEnd({ stage, recentMessages }) {
+  if (stage !== 'closing') return { ended: false };
+  const messages = Array.isArray(recentMessages) ? recentMessages : [];
+  if (!messages.length) return { ended: false };
+  const combinedText = messages
+    .map((message) => (typeof message?.content === 'string' ? message.content.trim() : ''))
+    .filter(Boolean)
+    .join(' ');
+
+  if (!combinedText) return { ended: false };
+
+  const consentRegex = /(dohodnut[eé]|plat[ií]|s[uú]hlas[ií]m|ok|v poriadku|m[oô]žeme|beriem|super, tak)/i;
+  const nextStepRegex = /(demo|ponuku|zmluv|pilot|po[sš]lem|stretnut|call|pozv[aá]nku|term[ií]n)/i;
+  const timeRegex = /(zajtra|pozajtra|do\s+\w+|do\s+\d+|v\s+\w+|bud[uú]ci\s+t[yý]žde[nň]|\d{1,2}\.\d{1,2}\.|\d{1,2}:\d{2})/i;
+  const approvalRegex =
+    /(intern[eé]\s+schv[aá]len|schv[aá]li[ťt]|posla[ťt]\s+podklad|po[sš]lite\s+info|po[sš]lite\s+materi[aá]l|kolegovia|finan[cč]n[ýy]\s+riadite[lľ]|procurement|n[aá]kup)/i;
+  const whatRegex = /(po[sš]lem|po[sš]lite|podklady|ponuku|zhrnutie|prezent[aá]ciu)/i;
+  const whyRegex = /(aby|kv[oô]li|preto|potrebujeme|mus[ií]me)/i;
+  const declineRegex =
+    /(nep[oô]jdeme|nezauj[ií]ma|nie\s+teraz|odmietam|nechceme|nebude|ru[sš]i[mm]e|zatia[lľ]\s+nie)/i;
+  const closingRegex = /(ďakujem|prajem|pekn[yý]\s+de[nň]|dovidenia|rozl[uú]čme|to je v[eé]etko)/i;
+
+  const hasAgreement =
+    consentRegex.test(combinedText) &&
+    nextStepRegex.test(combinedText) &&
+    timeRegex.test(combinedText);
+
+  const hasPostpone =
+    approvalRegex.test(combinedText) &&
+    (whatRegex.test(combinedText) || timeRegex.test(combinedText) || whyRegex.test(combinedText));
+
+  const hasDecline = declineRegex.test(combinedText) && closingRegex.test(combinedText);
+
+  let endType = null;
+  if (hasAgreement) endType = 'agree';
+  else if (hasPostpone) endType = 'postpone';
+  else if (hasDecline) endType = 'decline';
+
+  if (!endType) return { ended: false };
+
+  const timeMatch = combinedText.match(timeRegex);
+  const timeText = timeMatch ? timeMatch[0] : null;
+  const nextStepMatch = combinedText.match(nextStepRegex);
+  const nextStepText = nextStepMatch ? nextStepMatch[0] : null;
+
+  let summary = '';
+  if (endType === 'agree') {
+    if (nextStepText && timeText) {
+      summary = `Dohodnutý ďalší krok: ${nextStepText}, termín ${timeText}.`;
+    } else if (nextStepText) {
+      summary = `Dohodnutý ďalší krok: ${nextStepText}.`;
+    } else if (timeText) {
+      summary = `Dohodnutý termín: ${timeText}.`;
+    } else {
+      summary = 'Dohoda na ďalšom kroku je potvrdená.';
+    }
+  }
+
+  if (endType === 'postpone') {
+    const needsApproval = approvalRegex.test(combinedText);
+    const needsMaterials = whatRegex.test(combinedText);
+    if (needsApproval && needsMaterials) {
+      summary = 'Klient potrebuje interné schválenie a podklady.';
+    } else if (needsApproval) {
+      summary = 'Klient potrebuje interné schválenie.';
+    } else if (needsMaterials) {
+      summary = 'Klient žiada podklady alebo doplňujúce info.';
+    } else {
+      summary = 'Klient potrebuje bezpečný odklad s ďalším krokom.';
+    }
+    if (timeText) {
+      summary = `${summary} Termín: ${timeText}.`;
+    }
+  }
+
+  if (endType === 'decline') {
+    summary = 'Klient zatiaľ nechce pokračovať. Korektné ukončenie.';
+  }
+
+  return { ended: true, endType, summary: summary.trim().slice(0, 160) };
 }
 
 function truncateForPrompt(text, limit = HISTORY_MESSAGE_LIMIT) {
