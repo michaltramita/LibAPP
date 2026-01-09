@@ -52,10 +52,14 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
   const [inputValue, setInputValue] = useState('');
   const [isInitializing, setIsInitializing] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isEnded, setIsEnded] = useState(false);
+  const [endType, setEndType] = useState(null);
+  const [endSummary, setEndSummary] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
   const initStartedRef = useRef({});
   const initialMessageAppliedRef = useRef({});
+  const endTriggeredRef = useRef({});
   const messagesRef = useRef(messages);
   const listEndRef = useRef(null);
 
@@ -78,6 +82,10 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
     setInputValue('');
     setIsInitializing(false);
     setIsSending(false);
+    setIsEnded(false);
+    setEndType(null);
+    setEndSummary(null);
+    endTriggeredRef.current = {};
   }, [appSessionId]);
 
   useEffect(() => {
@@ -165,7 +173,8 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
       voiceSessionId &&
       inputValue.trim().length > 0 &&
       !isSending &&
-      !isInitializing
+      !isInitializing &&
+      !isEnded
   );
 
   const handleSend = async () => {
@@ -210,6 +219,10 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
       }
 
       const reply = data?.client_message || data?.reply || data?.message;
+      const didEnd = Boolean(data?.simulation_end);
+      const receivedEndType = data?.end_type || null;
+      const receivedSummary = data?.end_summary || null;
+      let nextMessages = null;
       setMessages((prev) => {
         const withoutTyping = prev.filter(
           (message) => !(message.isTyping && message.typingId === typingId)
@@ -217,11 +230,40 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
         if (!reply) {
           return withoutTyping;
         }
-        return [
+        const updated = [
           ...withoutTyping,
           { type: 'client', text: reply, timestamp: new Date().toISOString() },
         ];
+        if (didEnd) {
+          const labelMap = {
+            agree: 'Dohoda dosiahnutá',
+            postpone: 'Bezpečný odklad',
+            decline: 'Ukončené bez dohody',
+          };
+          const endLabel = labelMap[receivedEndType] || 'Simulácia ukončená';
+          const summarySuffix = receivedSummary ? ` — ${receivedSummary}` : '';
+          updated.push({
+            type: 'system',
+            text: `Simulácia ukončená: ${endLabel}${summarySuffix}`,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        nextMessages = updated;
+        return updated;
       });
+      if (didEnd) {
+        setIsEnded(true);
+        setEndType(receivedEndType);
+        setEndSummary(receivedSummary);
+        const endKey = voiceSessionId || appSessionId || 'default';
+        if (!endTriggeredRef.current[endKey] && onEndMeeting && nextMessages) {
+          endTriggeredRef.current[endKey] = true;
+          onEndMeeting(
+            { currentState: 'finished', metrics: { endType: receivedEndType } },
+            nextMessages
+          );
+        }
+      }
     } catch (error) {
       console.error(error);
       setMessages((prev) =>
@@ -249,9 +291,13 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
     setMessages([]);
     setErrorMessage(null);
     setIsInitializing(false);
+    setIsEnded(false);
+    setEndType(null);
+    setEndSummary(null);
     if (appSessionId) {
       delete initStartedRef.current[appSessionId];
     }
+    endTriggeredRef.current = {};
   };
 
   const handleEndMeeting = () => {
@@ -337,14 +383,21 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
             <div className="mx-auto w-full max-w-3xl space-y-3">
               {messages.map((message, index) => {
                 const isSalesman = message.type === 'salesman';
+                const isSystem = message.type === 'system';
                 return (
                   <div
                     key={`${message.timestamp}-${index}`}
-                    className={`flex ${isSalesman ? 'justify-end' : 'justify-start'}`}
+                    className={`flex ${
+                      isSystem ? 'justify-center' : isSalesman ? 'justify-end' : 'justify-start'
+                    }`}
                   >
                     <div
                       className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm sm:max-w-[70%] ${
-                        isSalesman ? 'bg-[#B81547] text-white' : 'bg-slate-100 text-slate-800'
+                        isSystem
+                          ? 'border border-slate-200 bg-slate-50 text-xs italic text-slate-500'
+                          : isSalesman
+                            ? 'bg-[#B81547] text-white'
+                            : 'bg-slate-100 text-slate-800'
                       }`}
                     >
                       {message.isTyping ? (
@@ -377,7 +430,8 @@ const SalesSimulationUI = ({ config, onEndMeeting, sessionId, accessToken }) => 
                   onKeyDown={handleInputKeyDown}
                   rows={2}
                   placeholder="Napíšte správu..."
-                  className="flex-1 resize-none rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#B81547] focus:outline-none focus:ring-1 focus:ring-[#B81547]"
+                  disabled={!canSend && isEnded}
+                  className="flex-1 resize-none rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-[#B81547] focus:outline-none focus:ring-1 focus:ring-[#B81547] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 />
                 <button
                   type="button"
