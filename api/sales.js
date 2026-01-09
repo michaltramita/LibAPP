@@ -1443,6 +1443,7 @@ async function generateClientReply({
       triggers,
       inputType,
       replyMode,
+      stance: plan.stance,
       maxQuestions,
     });
   }
@@ -1713,6 +1714,7 @@ function buildAnswerSeed({ latestMessage, stage, scenario, clientType, discType 
  * @property {"new"|"repeat"} clientType
  * @property {"neutral"|"D"|"I"|"S"|"C"} discUsed
  * @property {"direct"|"friendly"|"calm"|"analytical"} tone
+ * @property {"agree"|"neutral"|"object"} stance
  * @property {string} goal
  * @property {string[]} constraints
  * @property {string[]} questions
@@ -1749,6 +1751,13 @@ function buildReplyPlan({
           discType: clientDiscType,
         })
       : base.defaultReaction;
+  const stance = resolveStance({
+    stage: normalizedStage,
+    difficulty: normalizedDifficulty,
+    clientType: normalizedClientType,
+    discType: clientDiscType,
+    triggers: resolvedTriggers,
+  });
 
   if (inputType === 'greeting_smalltalk') {
     const smallTalk = buildSmallTalkPlan({ stage: normalizedStage, salesmanCount });
@@ -1759,6 +1768,7 @@ function buildReplyPlan({
       clientType: normalizedClientType,
       discUsed: 'neutral',
       tone: 'friendly',
+      stance: 'agree',
       goal: base.goal,
       constraints: [],
       scenarioContext: scenario,
@@ -1805,6 +1815,7 @@ function buildReplyPlan({
     clientType: normalizedClientType,
     discUsed,
     tone: ruleSet.tone,
+    stance,
     goal: base.goal,
     constraints,
     scenarioContext: scenario,
@@ -1813,9 +1824,13 @@ function buildReplyPlan({
   };
 
   plan = applyTriggers(plan, resolvedTriggers);
-  if (inputType === 'question') {
-    plan.reaction = answerSeed || base.defaultReaction;
-  }
+  plan = applyStanceToPlan(plan, {
+    inputType,
+    baseReaction: base.defaultReaction,
+    answerSeed,
+    triggers: resolvedTriggers,
+    maxQuestions,
+  });
 
   if (plan.stage === 'intro') {
     plan.constraints = [];
@@ -1852,19 +1867,48 @@ function detectTriggers(latestMessage, stage) {
   const lower = message.toLowerCase();
   const hasNumbers = /\d/.test(message);
   const hasExample = lower.includes('príklad') || lower.includes('napr') || lower.includes('napríklad');
+  const hasEvidence = hasNumbers || hasExample;
   const tooVague = message.length < 60 || (!hasNumbers && !hasExample);
+  const isQuestion = message.includes('?');
   const askedGoodQuestion =
     /(\bčo\b|\bako\b|\bprečo\b|\bkoľko\b|\bkedy\b)/i.test(lower) && message.endsWith('?');
   const proposedNextStep = /(navrhujem|ďalší krok|kedy môžeme|dohodnime|stretnutie)/i.test(lower);
   const jumpedToPitch =
     (stage === 'intro' || stage === 'discovery') &&
     /(naše riešenie|platforma|implementácia|funkcia|balík|cenník|cena|pitch)/i.test(lower);
+  const askedLazy =
+    isQuestion &&
+    /(m[oô]žete.*povedať.*viac|viete.*povedať.*viac|povedzte mi viac|ako to vid[ií]te|čo si o tom mysl[íi]te|čo si mysl[íi]te|m[oô]žete.*pribl[ií]žiť|m[oô]žete.*rozvinúť|čo ešte|čo iné)/i.test(
+      lower
+    );
+  const prematurePitch =
+    (stage === 'intro' || stage === 'discovery') &&
+    /(naše riešenie|pon[úu]kame|produkt|slu[zž]ba|platforma|funkcia|bal[ií]k|cenn[ií]k|cena|implement[aá]cia|benefit|feature|modul)/i.test(
+      lower
+    );
+  const assumptionJump =
+    /(takže|teda)\s+(chcete|budete|potrebujete|beriete|idete|ste pripraven[íi]|si vyberiete)/i.test(
+      lower
+    ) ||
+    /(to je pre v[aá]s|to v[aá]m bude vyhovovať|toto v[aá]m bude fungovať|ur[čc]ite chcete|ur[čc]ite budete)/i.test(
+      lower
+    );
+  const overconfidence =
+    /(najlepš|bezkonkurenč|garantujeme|100%|všetci používajú|každý používa|vždy funguje|bez rizika)/i.test(
+      lower
+    );
 
   return {
     tooVague,
     askedGoodQuestion,
     proposedNextStep,
     jumpedToPitch,
+    askedLazy,
+    prematurePitch,
+    assumptionJump,
+    overconfidence,
+    hasNumbers,
+    hasEvidence,
   };
 }
 
@@ -1878,7 +1922,7 @@ function applyTriggers(plan, triggers) {
   if (triggers.jumpedToPitch) {
     constraintSet.add('Zatiaľ sa držme potrieb, nie riešenia.');
   }
-  if (triggers.askedGoodQuestion) {
+  if (triggers.askedGoodQuestion && nextPlan.stance === 'agree') {
     nextPlan.reaction = 'Dobrá otázka, vďaka.';
   }
 
@@ -1890,6 +1934,210 @@ function resolveNextStepType(triggers) {
   if (triggers.proposedNextStep) return 'agree';
   if (triggers.tooVague || triggers.jumpedToPitch) return 'postpone';
   return 'agree';
+}
+
+function resolveStance({ stage, difficulty, clientType, discType, triggers }) {
+  const normalizedStage = STAGES.includes(stage) ? stage : 'intro';
+  const normalizedDifficulty = normalizeDifficulty(difficulty);
+  const normalizedClientType = normalizeClientType(clientType);
+  const normalizedDisc = normalizedClientType === 'repeat' ? normalizeDisc(discType) : 'neutral';
+  const difficultyModifiers = DIFFICULTY_MODIFIERS[normalizedDifficulty];
+  const strongTriggers =
+    triggers.prematurePitch || triggers.assumptionJump || triggers.overconfidence;
+  const challengeTriggers =
+    strongTriggers || triggers.askedLazy || triggers.tooVague || triggers.jumpedToPitch;
+
+  let stance = 'neutral';
+
+  if (normalizedClientType === 'new' && normalizedStage === 'intro') {
+    stance = 'neutral';
+  }
+
+  if (normalizedClientType === 'new' && triggers.prematurePitch) {
+    stance = 'object';
+  }
+
+  if (normalizedStage === 'discovery' && triggers.askedLazy) {
+    stance = 'object';
+  }
+
+  if (
+    normalizedStage === 'presentation' &&
+    difficultyModifiers.requireEvidence &&
+    !triggers.hasEvidence
+  ) {
+    stance = 'object';
+  }
+
+  if (normalizedStage === 'presentation' && !triggers.hasEvidence) {
+    stance = 'object';
+  }
+
+  if (normalizedStage === 'closing') {
+    stance = challengeTriggers ? 'object' : 'agree';
+  }
+
+  if (normalizedDifficulty === 'expert' && stance !== 'object') {
+    stance = triggers.hasEvidence ? 'neutral' : 'object';
+  }
+
+  if (normalizedClientType === 'repeat') {
+    if (normalizedDisc === 'D') {
+      stance = normalizedStage === 'closing' && !challengeTriggers ? 'agree' : 'object';
+    }
+    if (normalizedDisc === 'C') {
+      if (normalizedStage === 'presentation' && !triggers.hasEvidence) {
+        stance = 'object';
+      } else if (challengeTriggers) {
+        stance = 'object';
+      }
+    }
+    if (normalizedDisc === 'S') {
+      stance = strongTriggers ? 'object' : 'neutral';
+    }
+    if (normalizedDisc === 'I') {
+      if (strongTriggers) {
+        stance = 'object';
+      } else {
+        stance = normalizedStage === 'closing' ? 'agree' : 'neutral';
+      }
+    }
+  }
+
+  if (normalizedStage === 'intro' && stance === 'object') {
+    stance = strongTriggers ? 'object' : 'neutral';
+  }
+
+  return stance;
+}
+
+function applyStanceToPlan(plan, { inputType, baseReaction, answerSeed, triggers, maxQuestions }) {
+  const nextPlan = { ...plan };
+  const normalizedStage = nextPlan.stage;
+  const discUsed = nextPlan.discUsed;
+  const stance = nextPlan.stance;
+  const resolvedMaxQuestions =
+    typeof maxQuestions === 'number' ? maxQuestions : BASE_BY_STAGE[normalizedStage]?.maxQuestions ?? 1;
+
+  const baseAnswer = answerSeed || baseReaction || '';
+  nextPlan.reaction = resolveStanceReaction({
+    stance,
+    stage: normalizedStage,
+    discUsed,
+    inputType,
+    baseAnswer,
+  });
+
+  nextPlan.questions = resolveStanceQuestions({
+    stance,
+    stage: normalizedStage,
+    discUsed,
+    triggers,
+    maxQuestions: resolvedMaxQuestions,
+    fallbackQuestions: nextPlan.questions,
+  });
+
+  return nextPlan;
+}
+
+function resolveStanceReaction({ stance, stage, discUsed, inputType, baseAnswer }) {
+  const softObject = stage === 'intro';
+  const objectByDisc = {
+    D: softObject
+      ? 'Zatiaľ nie som presvedčený, poďme stručne na fakty.'
+      : 'Nie som presvedčený, chcem konkrétne fakty.',
+    I: softObject
+      ? 'Znie to zaujímavo, ale potrebujem konkrétnejšie vysvetlenie.'
+      : 'Znie to pekne, ale zatiaľ mi chýbajú dôkazy.',
+    S: softObject
+      ? 'Radšej by som spomalil, nie je mi to ešte jasné.'
+      : 'Chcem byť opatrný, zatiaľ mi chýba istota.',
+    C: softObject
+      ? 'Zatiaľ to nie je dostatočne podložené.'
+      : 'Bez dát a predpokladov to neviem prijať.',
+    neutral: softObject
+      ? 'Zatiaľ mi to nie je jasné, potrebujem viac kontextu.'
+      : 'Nie som presvedčený, potrebujem konkrétnejšie údaje.',
+  };
+  const neutralByDisc = {
+    D: 'Rozumiem, ale držme sa podstaty a faktov.',
+    I: 'Rozumiem, no chýba mi kontext.',
+    S: 'Rozumiem, ale poďme pomalšie.',
+    C: 'Rozumiem, no potrebujem viac detailov.',
+    neutral: 'Rozumiem, ale potrebujem viac kontextu.',
+  };
+  const agreeByDisc = {
+    D: 'Dáva to zmysel, môžeme ísť k podstate.',
+    I: 'Dáva to zmysel, môžeme pokračovať.',
+    S: 'Dáva to zmysel, môžeme pokračovať pokojne.',
+    C: 'Dáva to zmysel, môžeme ísť ďalej.',
+    neutral: 'Dáva to zmysel, môžeme pokračovať.',
+  };
+
+  let lead = '';
+  if (stance === 'object') {
+    lead = objectByDisc[discUsed] || objectByDisc.neutral;
+  } else if (stance === 'neutral') {
+    lead = neutralByDisc[discUsed] || neutralByDisc.neutral;
+  } else {
+    lead = agreeByDisc[discUsed] || agreeByDisc.neutral;
+  }
+
+  if (inputType === 'question' && baseAnswer) {
+    return `${lead} ${baseAnswer}`.trim();
+  }
+  if (stance === 'agree' && baseAnswer) {
+    return baseAnswer;
+  }
+  return lead;
+}
+
+function resolveStanceQuestions({
+  stance,
+  stage,
+  discUsed,
+  triggers,
+  maxQuestions,
+  fallbackQuestions,
+}) {
+  if (maxQuestions === 0) return [];
+  if (stance === 'agree') {
+    return fallbackQuestions.slice(0, maxQuestions);
+  }
+
+  const objectQuestionsByStage = {
+    intro: [
+      'V čom je to pre nás relevantné práve teraz?',
+      'Aký konkrétny problém to rieši?',
+    ],
+    discovery: [
+      'Aké konkrétne fakty to podporujú?',
+      'Čo presne tým myslíte v našom kontexte?',
+    ],
+    presentation: [
+      'Aké konkrétne čísla to dokazujú?',
+      'Aké sú merateľné výsledky z praxe?',
+    ],
+    closing: [
+      'Aké riziká zostávajú neuzavreté?',
+      'Čo sa stane, ak sa to teraz neschváli?',
+    ],
+  };
+
+  const neutralQuestionsByStage = {
+    intro: ['Čo je hlavný problém, ktorý chcete riešiť?'],
+    discovery: ['Čo je najdôležitejšie, aby sme si vyjasnili teraz?'],
+    presentation: ['Čo je kľúčový dôkaz, ktorý to podopiera?'],
+    closing: ['Čo musí byť ešte jasné, aby sme to uzavreli?'],
+  };
+
+  const stagePool =
+    stance === 'object'
+      ? objectQuestionsByStage[stage] || objectQuestionsByStage.discovery
+      : neutralQuestionsByStage[stage] || neutralQuestionsByStage.discovery;
+
+  const index = Math.abs((triggers?.hasNumbers ? 1 : 0) + stage.length + discUsed.length) % stagePool.length;
+  return [stagePool[index]].slice(0, maxQuestions);
 }
 
 async function renderPlanWithLLM(
@@ -1930,6 +2178,9 @@ Max počet otázok: ${maxQuestions}
 Pravidlá:
 - Vráť iba prirodzený slovenský text.
 - Použi plan.reaction a podľa potreby jednu z plan.questions.
+- Vždy rešpektuj plan.stance: object = skeptický odpor, neutral = brzdiaci, agree = opatrný súhlas.
+- Nikdy neznieť kooperatívne defaultne.
+- Ak plan.stance = object, nekladi otázky, ktoré by pomáhali s pitchingom.
 - Ak replyMode = statement_only alebo maxQuestions = 0: nekladieš žiadnu otázku.
 - Ak replyMode = statement_then_question: maximálne 1 otázka.
 - Žiadne označenia, nadpisy ani odrážky.
